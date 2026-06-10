@@ -578,21 +578,14 @@ export default {
     const composeCertificateImage = async (award) => {
       return new Promise(async (resolve, reject) => {
         try {
-          // 确保证书图片数据是base64格式
+          // 证书图片现在是静态文件路径（如 /static/certificates/uuid.png）
           if (!award.certificate_image) {
             throw new Error('证书图片数据为空');
           }
 
           const img = new window.Image();
           img.crossOrigin = 'anonymous';
-          
-          // 如果已经是完整的base64格式，直接使用
-          if (award.certificate_image.startsWith('data:image')) {
-            img.src = award.certificate_image;
-          } else {
-            // 否则添加前缀
-            img.src = `data:image/jpeg;base64,${award.certificate_image}`;
-          }
+          img.src = award.certificate_image;
 
           img.onload = async () => {
             const canvas = document.createElement('canvas');

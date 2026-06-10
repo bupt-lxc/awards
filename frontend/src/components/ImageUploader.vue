@@ -26,29 +26,21 @@
 import { defineProps, defineEmits } from 'vue';
 import { message } from 'ant-design-vue';
 import { PlusOutlined } from '@ant-design/icons-vue';
+import { awardAPI } from '../api/index.js';
 
 const props = defineProps({
-  modelValue: String, // The base64 string
+  modelValue: String, // 证书图片的静态文件路径
   label: {
     type: String,
     default: '上传图片',
   },
   maxSizeMB: {
     type: Number,
-    default: 5,
+    default: 10,
   },
 });
 
 const emit = defineEmits(['update:modelValue']);
-
-const convertImageToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = (error) => reject(error);
-  });
-};
 
 const handleBeforeUpload = async (file) => {
   if (!file.type.startsWith('image/')) {
@@ -60,14 +52,14 @@ const handleBeforeUpload = async (file) => {
     return false;
   }
   try {
-    const base64 = await convertImageToBase64(file);
-    emit('update:modelValue', base64);
-    message.success(`成功选择图片: ${file.name}`);
+    const response = await awardAPI.uploadCertificate(file, 'record');
+    emit('update:modelValue', response.data.file_path);
+    message.success(`成功上传图片: ${file.name}`);
   } catch (error) {
-    message.error(`图片 ${file.name} 转换失败`);
-    console.error('Base64 conversion failed:', error);
+    message.error(`图片 ${file.name} 上传失败`);
+    console.error('Image upload failed:', error);
   }
-  return false; // Prevent automatic upload
+  return false;
 };
 
 const removeImage = () => {

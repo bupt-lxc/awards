@@ -233,14 +233,6 @@
           </a-table>
 
           <div style="margin-top: 24px; text-align: center;">
-            <div style="margin-bottom: 16px;">
-              <a-checkbox v-model:checked="compressImages" style="margin-right: 16px;">
-                压缩图片以减少上传大小（推荐）
-              </a-checkbox>
-              <a-tooltip title="压缩图片可以显著减少上传数据大小，避免413错误">
-                <a-icon type="question-circle" style="color: #999;" />
-              </a-tooltip>
-            </div>
             <a-button type="primary" @click="batchSubmit" :loading="batchLoading" :disabled="excelData.length === 0" size="large">
               批量提交 ({{ excelData.length }}条记录)
             </a-button>
@@ -342,7 +334,6 @@ const rules = {
 
 // 批量图片上传文件列表
 const batchImageFiles = ref([]);
-const compressImages = ref(true); // 默认启用图片压缩
 
 // 个人获奖证书上传处理
 const handlePersonCertificateUpload = async (file) => {
@@ -351,27 +342,19 @@ const handlePersonCertificateUpload = async (file) => {
       message.error(`请选择图片文件（${file.name} 不是图片格式）`);
       return false;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      message.error(`图片大小不能超过5MB（${file.name} 过大）`);
+    if (file.size > 10 * 1024 * 1024) {
+      message.error(`图片大小不能超过10MB（${file.name} 过大）`);
       return false;
     }
-    let base64;
-    try {
-      base64 = await convertImageToBase64(file);
-    } catch (e) {
-      message.error(`图片 ${file.name} 转换失败，请重试或更换图片`);
-      console.error('图片base64转换失败:', e);
-      return false;
-    }
-    formState.certificate_image = base64;
+    // 上传图片到服务器，获取静态文件路径
+    const response = await awardAPI.uploadCertificate(file, 'single');
+    formState.certificate_image = response.data.file_path;
     message.success(`证书图片上传成功：${file.name}`);
-    
-    console.log('[单条录入] 上传后formState:', JSON.parse(JSON.stringify(formState)));
   } catch (error) {
     message.error(`图片上传失败：${file.name}`);
     console.error('图片上传失败:', error);
   }
-  return false; // 阻止自动上传
+  return false;
 };
 
 // 新增：预览个人证书
@@ -399,12 +382,12 @@ const handleMemberCertificateUpload = async (file) => {
       message.error('请选择图片文件');
       return false;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      message.error('图片大小不能超过5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      message.error('图片大小不能超过10MB');
       return false;
     }
-    const base64 = await convertImageToBase64(file);
-    newMember.certificate_image = base64;
+    const response = await awardAPI.uploadCertificate(file, 'member');
+    newMember.certificate_image = response.data.file_path;
     message.success('成员证书图片上传成功');
   } catch (error) {
     console.error('图片上传失败:', error);
@@ -680,96 +663,36 @@ const clearExcelData = () => {
   message.success('已清空所有数据');
 };
 
-// 批量提交Excel数据（自动分批，每批100条）
+// 批量提交Excel数据
 const batchSubmit = async () => {
   if (excelData.value.length === 0) {
     message.warning('没有数据可提交');
     return;
   }
 
-  // 校验所有记录图片
+  // 检查未匹配证书的记录
   let missing = [];
-  let invalidBase64 = [];
-  
-  // 验证函数
-  const validateBase64 = (base64) => {
-    return base64 && typeof base64 === 'string' && base64.startsWith('data:image/') && base64.includes('base64,');
-  };
-
-  // 压缩base64图片以减少数据大小
-  const compressBase64Image = (base64, maxWidth = 800, quality = 0.8) => {
-    return new Promise((resolve) => {
-      if (!validateBase64(base64)) {
-        resolve(base64);
-        return;
-      }
-
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-
-        // 计算新的尺寸
-        let { width, height } = img;
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        // 绘制压缩后的图片
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // 转换为压缩后的base64
-        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressedBase64);
-      };
-
-      img.onerror = () => {
-        resolve(base64); // 如果压缩失败，返回原图
-      };
-
-      img.src = base64;
-    });
-  };
-
-  // 检查所有记录
   excelData.value.forEach(item => {
     if (item.award_type === 'person') {
       if (!item.certificate_image) {
         missing.push(`个人-${item.person_name}(${item.id_number})`);
-      } else if (!validateBase64(item.certificate_image)) {
-        invalidBase64.push(`个人-${item.person_name}(${item.id_number})`);
       }
     } else if (item.award_type === 'group' && item.members) {
       item.members.forEach(m => {
         if (!m.certificate_image) {
           missing.push(`团体成员-${m.name}(${m.id_number})`);
-        } else if (!validateBase64(m.certificate_image)) {
-          invalidBase64.push(`团体成员-${m.name}(${m.id_number})`);
         }
       });
     }
   });
-
-  // 显示警告信息
-  if (invalidBase64.length > 0) {
-    message.error('发现无效的图片数据，请重新上传以下记录的证书：\n' + invalidBase64.join('\n'));
-    return;
-  }
 
   if (missing.length > 0) {
     const confirmed = await new Promise(resolve => {
       Modal.confirm({
         title: '确认提交',
         content: createVNode('div', {}, [
-          createVNode('p', { style: 'color: #ff4d4f; margin-bottom: 16px;' }, 
-            `发现有 ${missing.length} 条记录未匹配证书图片，这会导致这些记录没有证书。`
-          ),
-          createVNode('div', { style: 'max-height: 200px; overflow-y: auto; background: #f5f5f5; padding: 12px; border-radius: 4px;' },
-            missing.map(item => createVNode('p', { style: 'margin: 4px 0;' }, item))
+          createVNode('p', { style: 'color: #ff4d4f; margin-bottom: 16px;' },
+            `发现有 ${missing.length} 条记录未匹配证书图片。`
           ),
           createVNode('p', { style: 'margin-top: 16px;' }, '是否仍要继续提交？')
         ]),
@@ -780,23 +703,20 @@ const batchSubmit = async () => {
         onCancel: () => resolve(false),
       });
     });
-    
     if (!confirmed) return;
   }
 
   try {
     batchLoading.value = true;
     batchProgress.value = { visible: true, percent: 0, text: '准备上传...' };
-    
-    // 自动分批，每批5条（进一步减小批量大小以避免413错误）
+
     const BATCH_SIZE = 5;
     const allPersonAwards = [];
     const allGroupAwards = [];
 
-    // 准备数据（包含图片压缩）
-    batchProgress.value.text = compressImages.value ? '正在压缩图片数据...' : '正在准备数据...';
+    batchProgress.value.text = '正在准备数据...';
     batchProgress.value.percent = 5;
-    
+
     for (const item of excelData.value) {
       const data = {
         award_type: item.award_type,
@@ -809,32 +729,22 @@ const batchSubmit = async () => {
       if (item.award_type === 'group') {
         data.group_name = item.group_name;
         if (item.members && item.members.length > 0) {
-          // 压缩成员证书图片
-          const compressedMembers = [];
-          for (const m of item.members) {
-            const imageToUse = compressImages.value ? await compressBase64Image(m.certificate_image) : m.certificate_image;
-            compressedMembers.push({
-              name: m.name,
-              id_number: String(m.id_number),
-              certificate_image: validateBase64(imageToUse) ? imageToUse : undefined
-            });
-          }
-          data.members = compressedMembers;
+          data.members = item.members.map(m => ({
+            name: m.name,
+            id_number: String(m.id_number),
+            certificate_image: m.certificate_image || undefined
+          }));
         } else {
           data.members = [];
         }
-        // 压缩团体整体证书
-        if (validateBase64(item.certificate_image)) {
-          data.certificate_image = compressImages.value ? await compressBase64Image(item.certificate_image) : item.certificate_image;
+        if (item.certificate_image) {
+          data.certificate_image = item.certificate_image;
         }
         allGroupAwards.push(data);
       } else if (item.award_type === 'person') {
         data.person_name = item.person_name;
         data.id_number = String(item.id_number);
-        // 压缩个人证书图片
-        if (validateBase64(item.certificate_image)) {
-          data.certificate_image = compressImages.value ? await compressBase64Image(item.certificate_image) : item.certificate_image;
-        }
+        data.certificate_image = item.certificate_image || undefined;
         allPersonAwards.push(data);
       }
     }
@@ -1056,65 +966,45 @@ const downloadTemplate = () => {
   message.success('模板下载成功');
 };
 
-// 批量图片上传处理
+// 批量图片上传处理 — 上传到服务器获取静态路径，再匹配记录
 const handleBatchImageUpload = async (file) => {
   try {
-    // 验证图片格式和大小
     if (!file.type.startsWith('image/')) {
       message.error(`请选择图片文件（${file.name} 不是图片格式）`);
       return false;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      message.error(`图片大小不能超过5MB（${file.name} 过大）`);
+    if (file.size > 10 * 1024 * 1024) {
+      message.error(`图片大小不能超过10MB（${file.name} 过大）`);
       return false;
     }
 
-    // 转换图片为base64
-    let base64;
-    try {
-      base64 = await convertImageToBase64(file);
-      // 验证base64格式
-      if (!base64.startsWith('data:image/')) {
-        throw new Error('Invalid base64 format');
-      }
-    } catch (e) {
-      console.error('图片转换失败:', e);
-      message.error(`图片 ${file.name} 转换失败，请重试或更换图片`);
-      return false;
-    }
+    // 上传到服务器获取静态文件路径
+    const response = await awardAPI.uploadCertificate(file, 'batch');
+    const filePath = response.data.file_path;
 
     const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
     let matched = false;
 
-    // 遍历所有记录
     for (const record of excelData.value) {
       if (record.award_type === 'person') {
-        // 个人记录匹配
         if (normalizeId(record.id_number) === normalizeId(nameWithoutExt)) {
-          record.certificate_image = base64;
+          record.certificate_image = filePath;
           record.certificate_filename = file.name;
           matched = true;
-          console.log(`[个人证书] 匹配成功: ${record.person_name} (${record.id_number})`);
           break;
         }
       } else if (record.award_type === 'group') {
-        // 团体记录匹配
-        const groupKey = `${record.group_name}_${record.year}`;
-        if (nameWithoutExt === groupKey || nameWithoutExt === record.group_name) {
-          // 团体整体证书
-          record.certificate_image = base64;
+        if (nameWithoutExt === record.group_name) {
+          record.certificate_image = filePath;
           record.certificate_filename = file.name;
           matched = true;
-          console.log(`[团体证书] 匹配成功: ${record.group_name}`);
           break;
         } else if (record.members) {
-          // 团体成员证书匹配
           for (const member of record.members) {
             if (normalizeId(member.id_number) === normalizeId(nameWithoutExt)) {
-              member.certificate_image = base64;
+              member.certificate_image = filePath;
               member.certificate_filename = file.name;
               matched = true;
-              console.log(`[团体成员证书] 匹配成功: ${member.name} (${member.id_number})`);
               break;
             }
           }
@@ -1123,18 +1013,15 @@ const handleBatchImageUpload = async (file) => {
       }
     }
 
-    // 强制更新视图
     excelData.value = [...excelData.value];
 
     if (matched) {
       message.success(`成功匹配证书图片：${file.name}`);
-      // 打印当前数据状态
-      console.log('[数据更新] 当前Excel数据:', JSON.parse(JSON.stringify(excelData.value)));
     } else {
       message.warning(`未找到匹配的记录：${file.name}，请检查证件号或团体名称是否一致`);
     }
 
-    return false; // 阻止自动上传
+    return false;
   } catch (error) {
     console.error('图片处理失败:', error);
     message.error(`图片处理失败：${error.message || '未知错误'}`);
@@ -1142,36 +1029,17 @@ const handleBatchImageUpload = async (file) => {
   }
 };
 
-// 辅助函数：将图片文件转换为Base64
-const convertImageToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64String = reader.result;
-      // 确保base64字符串包含正确的前缀
-      if (!base64String.startsWith('data:image/')) {
-        const fileType = file.type || 'image/jpeg';
-        resolve(`data:${fileType};base64,${base64String.split(',')[1] || base64String}`);
-      } else {
-        resolve(base64String);
-      }
-    };
-    reader.onerror = (error) => {
-      console.error('图片转换失败:', error);
-      reject(error);
-    };
-    reader.readAsDataURL(file);
-  });
-};
+// 图片上传统一使用 awardAPI.uploadCertificate(file, idNumber)
+// 返回的 response.data.file_path 即为静态文件路径（如 /static/certificates/uuid.png）
 
 // 新增：预览批量上传的证书
-const previewBatchCertificate = (base64Image) => {
-  if (!base64Image) {
+const previewBatchCertificate = (imagePath) => {
+  if (!imagePath) {
     message.warning('没有可预览的图片。');
     return;
   }
   const newWindow = window.open();
-  newWindow.document.write(`<body style="margin:0; display:flex; justify-content:center; align-items:center; background-color:#333;"><img src="${base64Image}" style="max-width:100%; max-height:100%;" /></body>`);
+  newWindow.document.write(`<body style="margin:0; display:flex; justify-content:center; align-items:center; background-color:#333;"><img src="${imagePath}" style="max-width:100%; max-height:100%;" /></body>`);
 };
 
 const labelCol = {

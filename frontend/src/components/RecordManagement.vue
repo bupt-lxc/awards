@@ -1112,10 +1112,10 @@ const editRecord = (record) => {
   editModalVisible.value = true;
 };
 
-// 验证图片数据
+// 验证图片路径（现为静态文件路径如 /static/certificates/uuid.png）
 const validateImageData = (imageData) => {
-  if (!imageData) return true;
-  return imageData.startsWith('data:image/') && imageData.includes('base64,');
+  if (!imageData) return true;  // 允许为空
+  return imageData.startsWith('/static/certificates/');
 };
 
 // 保存编辑
@@ -1283,23 +1283,10 @@ const beforeUpload = (file) => {
   return false; // 阻止自动上传，手动处理
 };
 
-// 图片转base64
-const convertImageToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64String = e.target.result;
-      // 确保base64字符串包含正确的前缀
-      if (!base64String.startsWith('data:image/')) {
-        const fileType = file.type || 'image/jpeg';
-        resolve(`data:${fileType};base64,${base64String.split(',')[1] || base64String}`);
-      } else {
-        resolve(base64String);
-      }
-    };
-    reader.onerror = (error) => reject(error);
-    reader.readAsDataURL(file);
-  });
+// 图片上传到服务器获取静态文件路径
+const uploadImageToServer = async (file) => {
+  const response = await awardAPI.uploadCertificate(file, 'edit');
+  return response.data.file_path;
 };
 
 // 个人证书图片上传处理
@@ -1307,8 +1294,8 @@ const handlePersonCertificateChange = async (info) => {
   try {
     if (info.file) {
       loading.value = true;
-      const base64Image = await convertImageToBase64(info.file.originFileObj || info.file);
-      editForm.value.certificate_image = base64Image;
+      const filePath = await uploadImageToServer(info.file.originFileObj || info.file);
+      editForm.value.certificate_image = filePath;
       message.success('证书图片上传成功');
     }
   } catch (error) {
@@ -1324,8 +1311,8 @@ const handleMemberCertificateChange = async (info, memberIndex) => {
   try {
     if (info.file && editForm.value.members[memberIndex]) {
       loading.value = true;
-      const base64Image = await convertImageToBase64(info.file.originFileObj || info.file);
-      editForm.value.members[memberIndex].certificate_image = base64Image;
+      const filePath = await uploadImageToServer(info.file.originFileObj || info.file);
+      editForm.value.members[memberIndex].certificate_image = filePath;
       message.success(`成员 ${editForm.value.members[memberIndex].name} 的证书图片上传成功`);
     }
   } catch (error) {
@@ -1584,7 +1571,7 @@ const processImageUrl = (imageUrl) => {
     return null; // 返回null表示需要按需加载
   }
   
-  // 如果已经是base64或完整URL，直接返回
+  // 如果是完整URL或静态路径，直接返回
   if (imageUrl.startsWith('data:image/') || imageUrl.startsWith('http')) {
     return imageUrl;
   }

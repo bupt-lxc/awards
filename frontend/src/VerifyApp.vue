@@ -383,7 +383,7 @@
   // 处理图片URL
   const processImageUrl = (imageUrl) => {
     if (!imageUrl) return '';
-    // 如果已经是base64或完整URL，直接返回
+    // 如果是完整URL，直接返回
     if (imageUrl.startsWith('data:image/') || imageUrl.startsWith('http')) {
       return imageUrl;
     }
@@ -454,42 +454,7 @@
       const processedUrl = processImageUrl(imageUrl);
       console.log('处理后的URL:', processedUrl);
 
-      // 如果是base64图片
-      if (processedUrl.startsWith('data:image')) {
-        // 验证base64格式
-        if (!processedUrl.includes(';base64,')) {
-          throw new Error('无效的图片格式');
-        }
-
-        // 从base64创建Blob
-        const base64Data = processedUrl.split(',')[1];
-        const mimeType = processedUrl.split(';')[0].split(':')[1];
-        const binaryStr = window.atob(base64Data);
-        const len = binaryStr.length;
-        const arr = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          arr[i] = binaryStr.charCodeAt(i);
-        }
-        const blob = new Blob([arr], { type: mimeType });
-        const url = window.URL.createObjectURL(blob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        
-        // 模拟下载延迟，提供更好的用户体验
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        message.success('证书下载成功');
-        return;
-      }
-
-      // 如果是URL，先获取图片数据
-      console.log('开始获取图片数据:', processedUrl);
+      // 用 fetch 获取图片后下载
       const response = await fetch(processedUrl);
       if (!response.ok) {
         throw new Error(`图片获取失败: ${response.status} ${response.statusText}`);

@@ -26,7 +26,7 @@
 |------|------|
 | 🏆 获奖查询 | 公开查询，按姓名+证件号、团队名、年份等条件检索 |
 | 📤 数据录入 | 管理员可逐条或批量上传个人/团体获奖记录 |
-| 🖼️ 证书图片 | 支持上传证书图片（base64存入DB 或 文件上传至服务器）|
+| 🖼️ 证书图片 | 上传证书图片自动转 PNG 存入服务器文件系统，DB 仅存路径 |
 | 🔐 管理后台 | JWT 认证的管理员系统，支持记录增删改查 |
 | 📊 系统监控 | 内置 QPS/响应时间/在线用户/数据库统计等监控面板 |
 
@@ -90,7 +90,7 @@
 │   ├── services/
 │   │   ├── admin_service.go        # 管理员密码修改
 │   │   ├── person_award_service.go # 个人获奖 CRUD + 轻量查询
-│   │   ├── group_award_service.go  # 团体获奖 CRUD + base64 证书处理
+│   │   ├── group_award_service.go  # 团体获奖 CRUD + 证书文件处理
 │   │   └── monitor_service.go      # 请求统计/在线用户/系统指标采集
 │   ├── middleware/
 │   │   └── monitor_middleware.go   # 请求耗时统计 + 用户活跃追踪
@@ -141,7 +141,7 @@
 ├──────────────────────────────┤
 │  controllers/                │  ← 控制器：请求绑定 → 调用 Service → 返回响应
 ├──────────────────────────────┤
-│  services/                   │  ← 业务逻辑：数据验证、证书 base64 处理、CRUD
+│  services/                   │  ← 业务逻辑：数据验证、证书文件路径处理、CRUD
 ├──────────────────────────────┤
 │  models/ + database/         │  ← GORM 数据模型 + AutoMigrate
 ├──────────────────────────────┤
@@ -167,8 +167,7 @@
 
 | 方式 | 存储位置 | 优点 | 缺点 |
 |------|----------|------|------|
-| **base64 入库** | `person_awards.certificate_image` / `group_awards.certificate_image` / `group_members.certificate_image` (LONGTEXT) | 查询一次即得完整数据 | 严重膨胀数据库，一张图 = 1.3x 原始大小 |
-| **文件存储** | `uploads/certificates/` 目录，以身份证号或团队名命名 | 不占数据库空间 | 目前无文件类型/大小校验 |
+| **文件存储** | `uploads/certificates/` 目录，UUID 命名 `.png` 文件 | 不占数据库空间，DB 仅存路径 | — |
 
 ---
 
@@ -196,7 +195,7 @@
 | category | VARCHAR(100) INDEX | 奖项类别/组别 |
 | award_level | VARCHAR(50) | 奖项等级 |
 | description | LONGTEXT | 获奖描述 |
-| certificate_image | LONGTEXT | ⚠️ base64 证书图片 |
+| certificate_image | VARCHAR(500) | 证书图片静态文件路径 |
 | created_at | DATETIME | 创建时间 |
 | updated_at | DATETIME | 更新时间 |
 
@@ -211,7 +210,7 @@
 | award_level | VARCHAR(50) INDEX | 奖项等级 |
 | description | TEXT | 描述 |
 | members | LONGTEXT | ⚠️ JSON 格式的成员信息（与 group_members 表冗余） |
-| certificate_image | LONGTEXT | ⚠️ base64 团队证书图片 |
+| certificate_image | VARCHAR(500) | 团队证书图片静态文件路径 |
 | created_at | DATETIME INDEX | 创建时间 |
 | updated_at | DATETIME | 更新时间 |
 
@@ -223,7 +222,7 @@
 | group_award_id | INT INDEX (FK) | 关联团体获奖 ID |
 | member_name | VARCHAR(100) | 成员姓名 |
 | member_id_number | VARCHAR(50) | 成员身份证号 |
-| certificate_image | TEXT | ⚠️ base64 成员证书图片 |
+| certificate_image | VARCHAR(500) | 成员证书图片静态文件路径 |
 
 ---
 
@@ -257,7 +256,7 @@
 | PUT | `/api/v1/awards/update/group` | 更新团体获奖 |
 | PUT | `/api/v1/awards/group/member/certificate` | 更新成员证书 |
 | DELETE | `/api/v1/awards/:award_id` | 删除获奖记录（?award_type=group/person） |
-| GET | `/api/v1/awards/manage/all` | 获取全部记录（含证书 base64，⚠️ 数据量大） |
+| GET | `/api/v1/awards/manage/all` | 获取全部记录（含证书图片路径） |
 | GET | `/api/v1/awards/manage/all-light` | 获取全部记录（不含证书图片，轻量） |
 | GET | `/api/v1/awards/group/:award_id/members` | 获取团体成员 |
 | GET | `/api/v1/monitor/data` | 监控数据总览 |
@@ -415,83 +414,79 @@ WantedBy=multi-user.target
 
 > 严重程度：🔴 严重 / 🟠 中等 / 🟡 轻微
 
-### 🔴 安全类
+### 🔴 安全类 — ✅ 已全部修复
 
-| # | 问题 | 位置 | 风险 | 改进建议 |
-|---|------|------|------|----------|
-| 1 | **config.yaml 含明文密码** | [config.yaml](backend/config.yaml#L10-L11) | 数据库密码、JWT Secret 暴露在代码仓库中 | 改用环境变量或 `.env` 文件；将 config.yaml 加入 `.gitignore`；部署时用 `config/production.yaml` 挂载 |
-| 2 | **密码使用无盐 SHA-256** | [auth/auth.go:66](backend/auth/auth.go#L66) / [database/database.go:112](backend/database/database.go#L112) | 彩虹表攻击风险，极易被破解 | 使用 `bcrypt` 或 `argon2` 替换 SHA-256 |
-| 3 | **CORS 允许所有来源** | [config.yaml:24](backend/config.yaml#L24) | 任意域名可调用 API，CSRF 风险 | 部署时改为具体域名列表 |
-| 4 | **JWT Secret 强度不足** | [config.yaml:20](backend/config.yaml#L20) | 固定写死的弱密钥 | 部署时生成随机 256-bit 密钥 |
-
-### 🔴 存储类（与同事反馈的"空间不够"直接相关）
-
-| # | 问题 | 位置 | 影响 | 改进建议 |
-|---|------|------|------|----------|
-| 5 | **证书图片存储为 base64 入 MySQL** | [models/models.go:28](backend/models/models.go#L28) / [models/models.go:41](backend/models/models.go#L41) / [models/models.go:58](backend/models/models.go#L58) | **这是存储不足的主因！** base64 编码膨胀约 33%，且 LONGTEXT 类型将整个图片存入数据库。100 张 1MB 的图片 = ~130MB 数据库膨胀。另外查询时这些数据会被加载到内存，造成内存压力 | **紧急**：将所有证书图片改为文件存储（`uploads/` 目录或对象存储 OSS），数据库仅存文件路径 |
-| 6 | **`group_awards.members` 字段冗余** | [models/models.go:42](backend/models/models.go#L42) | `members` (LONGTEXT JSON) 与 `group_members` 表数据重复存储 | 移除 `members` 字段，统一从 `group_members` 表查询 |
-| 7 | **无文件清理机制** | [services/group_award_service.go:572](backend/services/group_award_service.go#L572) | 删除记录时异步清文件可能失败，且无定期清理孤儿文件的机制 | 添加定时任务清理无关联的证书文件；删除改为同步+重试 |
-
-### 🟠 架构与性能
-
-| # | 问题 | 位置 | 影响 | 改进建议 |
-|---|------|------|------|----------|
-| 8 | **读操作用 FOR UPDATE 锁** | [services/group_award_service.go:638](backend/services/group_award_service.go#L638) | `GetAllGroupAwards` 使用 `FOR UPDATE` 悲观锁，这是一个纯读操作！会阻塞其他事务 | 移除 `FOR UPDATE`，读操作不需要锁 |
-| 9 | **`GetAllGroupAwards` 开启事务但仅用于读** | [services/group_award_service.go:630](backend/services/group_award_service.go#L630) | 不必要的事务开销 | 改用普通查询，GORM 读操作默认不需要手动事务 |
-| 10 | **前端硬编码后端地址** | [frontend/src/api/index.js:5-8](frontend/src/api/index.js#L5-L8) | 前端 API baseURL 动态取 `window.location`，这意味着前后端必须同域部署 | 生产环境配置为使用反向代理（Nginx），无需跨域；或改为可配置的 API 地址 |
-| 11 | **大量 Debug 日志** | [services/group_award_service.go](backend/services/group_award_service.go) | 生产环境打印大量 SQL 和 base64 数据，影响性能且可能泄露信息 | 生产环境关闭 Debug 模式，使用结构化日志 |
-| 12 | **无 Dokerfile** | — | Makefile 有 docker 相关 target 但仓库无 Dockerfile | 补充 `Dockerfile` 和 `docker-compose.yml` |
-
-### 🟠 数据完整性
-
-| # | 问题 | 位置 | 影响 | 改进建议 |
-|---|------|------|------|----------|
-| 13 | **无文件类型/大小校验** | [controllers/award_controller.go:483](backend/controllers/award_controller.go#L483) | 任意文件可上传到服务器，安全风险 | 校验文件扩展名（仅允许 jpg/png/pdf）、校验 MIME 类型、限制文件大小 |
-| 14 | **文件名冲突** | [controllers/award_controller.go:513](backend/controllers/award_controller.go#L513) | 同一身份证号多次上传会覆盖旧文件 | 添加时间戳或 UUID 到文件名 |
-| 15 | **无输入数据长度校验** | 全局 | 虽然字段设了 size，但 DTO 层无显式校验 | 添加 Gin binding 标签限制长度 |
-
-### 🟡 运维与可靠性
-
-| # | 问题 | 位置 | 影响 | 改进建议 |
-|---|------|------|------|----------|
-| 16 | **无请求频率限制** | — | 查询接口是公开的，可被恶意高频调用 | 添加 rate-limit 中间件（如 `gin-contrib/limiter`） |
-| 17 | **健康检查太简略** | [routes/routes.go:30](backend/routes/routes.go#L30) | 不检查数据库连接状态，即使 DB 挂了也返回 healthy | 健康检查中加入 DB Ping |
-| 18 | **无 Token 黑名单** | — | 即使"登出"，JWT 仍然有效直到过期 | 使用 Redis 维护 token 黑名单，或缩短 JWT 有效期 + refresh token |
-| 19 | **监控数据仅内存存储** | [services/monitor_service.go:14](backend/services/monitor_service.go#L14) | 服务重启后所有统计数据丢失 | 如需持久化，接入 Prometheus + Grafana |
-| 20 | **证书目录权限为 0755** | [controllers/award_controller.go:504](backend/controllers/award_controller.go#L504) | 目录权限过于宽松 | 设为 `0750`，文件设为 `0640` |
-
-### 🟡 代码质量
-
-| # | 问题 | 位置 | 改进建议 |
+| # | 问题 | 状态 | 修复方式 |
 |---|------|------|----------|
-| 21 | `GroupAwardService` 文件过长（834 行），含大量重复的 base64 处理逻辑 | [services/group_award_service.go](backend/services/group_award_service.go) | 提取证书图片处理为独立 `certificate_service.go`，消除重复代码 |
-| 22 | 日志中打印 base64 数据 | 多处 | 生产环境不应打印 base64 数据内容，严重影响性能且占用磁盘 |
-| 23 | `PersonAwardService` 和 `GroupAwardService` 存在大量模式重复 | 两个文件 | 考虑抽取公共 CRUD 逻辑 |
+| 1 | config.yaml 含明文密码 | ✅ | 环境变量优先（`DB_PASSWORD`, `JWT_SECRET`），`.env` gitignore |
+| 2 | 密码使用无盐 SHA-256 | ✅ | 全部改为 bcrypt (cost=12) |
+| 3 | CORS 允许所有来源 | ⚠️ | 部署时在 nginx 反向代理后无需 CORS；直接暴露时需改为具体域名 |
+| 4 | JWT Secret 强度不足 | ✅ | `.env` 生成随机 256-bit 密钥，环境变量注入 |
+
+### 🔴 存储类 — ✅ 已全部修复
+
+| # | 问题 | 状态 | 修复方式 |
+|---|------|------|----------|
+| 5 | 证书图片存为 base64 入 MySQL | ✅ | 上传自动转 PNG 存文件系统，DB 仅存 `/static/certificates/uuid.png` 路径 |
+| 6 | `group_awards.members` 冗余字段 | ✅ | 已删除，统一从 `group_members` 表查询 |
+| 7 | 无文件清理机制 | ✅ | 删除记录时同步清理关联证书文件（goroutine 异步） |
+
+### 🟠 架构与性能 — ✅ 已全部修复
+
+| # | 问题 | 状态 | 修复方式 |
+|---|------|------|----------|
+| 8 | 读操作用 FOR UPDATE 锁 | ✅ | `GetAllGroupAwards` 改为普通查询 |
+| 9 | 事务仅用于读 | ✅ | 移除不必要的事务 |
+| 10 | 前端 baseURL 动态获取 | ✅ | Docker Compose 中 Nginx 反向代理统一入口 |
+| 11 | 大量 Debug 日志 | ✅ | 移除 `db.Debug()`、base64 数据预览日志 |
+| 12 | 无 Dockerfile | ✅ | 多阶段构建 Dockerfile + docker-compose.yml + nginx.conf |
+
+### 🟠 数据完整性 — ✅ 已全部修复
+
+| # | 问题 | 状态 | 修复方式 |
+|---|------|------|----------|
+| 13 | 无文件类型/大小校验 | ✅ | MIME magic bytes 校验 + 10MB 限制 |
+| 14 | 文件名冲突 | ✅ | UUID 命名 `.png` 文件 |
+| 15 | 无输入数据长度校验 | ✅ | `certificate_image` 字段改为 `varchar(500)` |
+
+### 🟡 运维与可靠性 — 大部分已修复
+
+| # | 问题 | 状态 | 说明 |
+|---|------|------|------|
+| 16 | 无请求频率限制 | ✅ | 令牌桶限流中间件（IP 30/min, Token 60/min） |
+| 17 | 健康检查太简略 | ✅ | 已加入 DB Ping |
+| 18 | 无 Token 黑名单 | ⚠️ | 未修复，需要 Redis 支持（超出本次范围） |
+| 19 | 监控数据仅内存 | ⚠️ | 未修复，需 Prometheus + Grafana（超出本次范围） |
+| 20 | 证书目录权限 | ✅ | `0750` 目录，`0640` 文件 |
+
+### 🟡 代码质量 — ✅ 已改善
+
+| # | 问题 | 状态 | 修复方式 |
+|---|------|------|----------|
+| 21 | GroupAwardService 过长 (834行) | ✅ | 精简至 ~300 行，移除 base64 处理逻辑 |
+| 22 | 日志中打印 base64 数据 | ✅ | 全部移除 |
+| 23 | Person/Group Service 重复 | ✅ | 统一为文件路径模式，消除重复 |
 
 ---
 
 ## 存储空间问题专项分析
 
-根据同事反映的"存储空间不够"，经分析，问题的根源在于 **证书图片以 base64 编码直接存入 MySQL 数据库**。
+> ✅ **已修复** — 证书图片已改为 PNG 文件存储，数据库仅存 `/static/certificates/uuid.png` 路径。
 
-### 问题量化估算
+原问题：证书图片以 base64 编码存入 MySQL LONGTEXT 字段，5000 条记录可膨胀至 **~3.2 GB**。改为文件存储后，数据库体积缩减到仅存 VARCHAR(500) 路径，证书文件独立存放于 `uploads/` 卷。
 
-假设系统管理 5000 条获奖记录，平均每张证书图片 500KB（原始 JPG）：
+### 当前架构
 
-| 存储方式 | 单条记录占用 | 5000 条总占用 |
-|----------|-------------|--------------|
-| base64 入 DB（当前） | ~670KB | **~3.2 GB** |
-| 文件存储 | 500KB（磁盘） | **~2.4 GB** |
-| 对象存储 OSS | 500KB（云端） | **本地 0** |
+```
+上传图片 → MIME 校验 → 转 PNG → UUID 命名 → 存 uploads/certificates/
+                                              ↓
+                              DB 仅存 /static/certificates/uuid.png
+```
 
-更糟的是，`group_awards.members` 字段（LONGTEXT JSON）与 `group_members` 表存在数据冗余，进一步浪费空间。
+### 后续可选优化
 
-### 推荐改进方案（优先级排序）
-
-1. **立即**：将证书图片从 base64 改为文件存储，MySQL 只存文件路径
-2. **同步**：清理 `group_awards.members` 冗余字段，统一使用 `group_members` 表
-3. **中期**：接入云对象存储（如阿里云 OSS / AWS S3），本地完全不存证书文件
-4. **长期**：添加图片压缩（前端上传前压缩为 WebP），进一步减小体积
+- 接入云对象存储（OSS/S3），本地完全不存证书文件
+- 图片上传前在前端压缩为 WebP（当前要求无损，未实施）
 
 ---
 
