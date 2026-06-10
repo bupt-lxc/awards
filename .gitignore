@@ -1,0 +1,45 @@
+# === 敏感信息 ===
+.env
+*.pem
+*.key
+
+# === 上传文件 ===
+backend/uploads/
+
+# === 前端 ===
+frontend/node_modules/
+frontend/dist/
+
+# === 构建产物 ===
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+awards-management
+awards-management_unix
+
+# === 数据库文件 ===
+*.db
+*.sqlite
+*.sqlite3
+
+# === 日志 ===
+logs/
+*.log
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === 临时文件 ===
+tmp/
+temp/

@@ -1,0 +1,34 @@
+server:
+  host: "0.0.0.0"
+  port: 8000
+  mode: "release" # debug, release, test
+
+database:
+  host: "1Panel-mysql-lAXR"
+  port: 3306
+  username: "awards_management"
+  password: "mRzjTaK5N6y!@sQF"
+  dbname: "awards_management"
+  charset: "utf8mb4"
+  parseTime: true
+  loc: "Local"
+  maxIdleConns: 10
+  maxOpenConns: 100
+  connMaxLifetime: 3600 # seconds
+
+jwt:
+  secret: "W8!kLp2zQe7xVbNm"
+  expireHours: 8
+
+cors:
+  allowOrigins:
+    - "*"
+  allowMethods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  allowHeaders:
+    - "*"
+  allowCredentials: true
