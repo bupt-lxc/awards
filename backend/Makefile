@@ -84,7 +84,7 @@ db-reset: db-drop db-create
 
 # Docker operations
 docker-build:
-	docker build -t awards-management .
+	docker build -f Dockerfile -t awards-management .
 
 docker-run:
 	docker run -p 8000:8000 awards-management

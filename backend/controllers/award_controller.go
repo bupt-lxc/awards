@@ -38,7 +38,7 @@ func (ac *AwardController) QueryPersonAwards(c *gin.Context) {
 
 	awards, err := ac.personAwardService.QueryPersonAwards(query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "查询失败: " + err.Error()})
+		serverError(c, "查询失败", err)
 		return
 	}
 
@@ -66,7 +66,7 @@ func (ac *AwardController) QueryGroupAwards(c *gin.Context) {
 
 	awards, err := ac.groupAwardService.QueryGroupAwards(query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "查询失败: " + err.Error()})
+		serverError(c, "查询失败", err)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (ac *AwardController) UploadPersonAward(c *gin.Context) {
 
 	award, err := ac.personAwardService.CreatePersonAward(record)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "个人获奖记录上传失败: " + err.Error()})
+		serverError(c, "个人获奖记录上传失败", err)
 		return
 	}
 
@@ -108,7 +108,7 @@ func (ac *AwardController) UploadGroupAward(c *gin.Context) {
 
 	award, err := ac.groupAwardService.CreateGroupAward(record)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "团体获奖记录上传失败: " + err.Error()})
+		serverError(c, "团体获奖记录上传失败", err)
 		return
 	}
 
@@ -127,7 +127,7 @@ func (ac *AwardController) BatchUploadPersonAwards(c *gin.Context) {
 
 	successful, failed, failedItems, err := ac.personAwardService.BatchCreatePersonAwards(records)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "批量上传失败: " + err.Error()})
+		serverError(c, "批量上传失败", err)
 		return
 	}
 
@@ -147,7 +147,7 @@ func (ac *AwardController) BatchUploadGroupAwards(c *gin.Context) {
 
 	successful, failed, failedItems, err := ac.groupAwardService.BatchCreateGroupAwards(records)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "批量上传失败: " + err.Error()})
+		serverError(c, "批量上传失败", err)
 		return
 	}
 
@@ -166,7 +166,7 @@ func (ac *AwardController) UpdatePersonAward(c *gin.Context) {
 	}
 
 	if err := ac.personAwardService.UpdatePersonAward(update); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "更新失败: " + err.Error()})
+		serverError(c, "更新失败", err)
 		return
 	}
 
@@ -185,7 +185,7 @@ func (ac *AwardController) UpdateGroupAward(c *gin.Context) {
 	}
 
 	if err := ac.groupAwardService.UpdateGroupAward(update); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "更新失败: " + err.Error()})
+		serverError(c, "更新失败", err)
 		return
 	}
 
@@ -216,7 +216,7 @@ func (ac *AwardController) DeleteAward(c *gin.Context) {
 	}
 
 	if deleteErr != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "删除失败: " + deleteErr.Error()})
+		serverError(c, "删除失败", deleteErr)
 		return
 	}
 
@@ -252,13 +252,13 @@ func (ac *AwardController) GetAwardDetail(c *gin.Context) {
 func (ac *AwardController) GetAllAwardsForManagement(c *gin.Context) {
 	personAwards, err := ac.personAwardService.GetAllPersonAwards()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "获取个人获奖记录失败: " + err.Error()})
+		serverError(c, "获取个人获奖记录失败", err)
 		return
 	}
 
 	groupAwards, err := ac.groupAwardService.GetAllGroupAwards()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "获取团体获奖记录失败: " + err.Error()})
+		serverError(c, "获取团体获奖记录失败", err)
 		return
 	}
 
@@ -272,13 +272,13 @@ func (ac *AwardController) GetAllAwardsForManagement(c *gin.Context) {
 func (ac *AwardController) GetAllAwardsForManagementLight(c *gin.Context) {
 	personAwards, err := ac.personAwardService.GetAllPersonAwardsLight()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "获取个人获奖记录失败: " + err.Error()})
+		serverError(c, "获取个人获奖记录失败", err)
 		return
 	}
 
 	groupAwards, err := ac.groupAwardService.GetAllGroupAwardsLight()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "获取团体获奖记录失败: " + err.Error()})
+		serverError(c, "获取团体获奖记录失败", err)
 		return
 	}
 
@@ -298,7 +298,7 @@ func (ac *AwardController) GetGroupMembersWithCertificates(c *gin.Context) {
 
 	members, err := ac.groupAwardService.GetGroupMembersWithCertificates(uint(awardID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "获取成员信息失败: " + err.Error()})
+		serverError(c, "获取成员信息失败", err)
 		return
 	}
 
@@ -315,7 +315,7 @@ func (ac *AwardController) UpdateMemberCertificate(c *gin.Context) {
 	}
 
 	if err := ac.groupAwardService.UpdateMemberCertificate(update); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "更新失败: " + err.Error()})
+		serverError(c, "更新失败", err)
 		return
 	}
 
@@ -348,14 +348,14 @@ func (ac *AwardController) UploadCertificateImage(c *gin.Context) {
 	// 打开文件读取全部内容
 	src, err := file.Open()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "读取文件失败: " + err.Error()})
+		serverError(c, "读取文件失败", err)
 		return
 	}
 	defer src.Close()
 
 	fileBytes, err := io.ReadAll(src)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "读取文件失败: " + err.Error()})
+		serverError(c, "读取文件失败", err)
 		return
 	}
 
@@ -371,21 +371,21 @@ func (ac *AwardController) UploadCertificateImage(c *gin.Context) {
 	// 转为 PNG
 	pngBytes, err := utils.ConvertToPNG(fileBytes)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "图片转换失败: " + err.Error()})
+		serverError(c, "图片转换失败", err)
 		return
 	}
 
 	// 保存到 uploads/certificates/
 	certificatesDir := "uploads/certificates"
 	if err := os.MkdirAll(certificatesDir, 0750); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "创建目录失败: " + err.Error()})
+		serverError(c, "创建目录失败", err)
 		return
 	}
 
 	filename := uuid.New().String() + ".png"
 	filePath := filepath.Join(certificatesDir, filename)
 	if err := os.WriteFile(filePath, pngBytes, 0640); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "保存文件失败: " + err.Error()})
+		serverError(c, "保存文件失败", err)
 		return
 	}
 
@@ -412,7 +412,7 @@ func (ac *AwardController) BatchUploadCertificateImages(c *gin.Context) {
 
 	certificatesDir := "uploads/certificates"
 	if err := os.MkdirAll(certificatesDir, 0750); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "创建目录失败: " + err.Error()})
+		serverError(c, "创建目录失败", err)
 		return
 	}
 

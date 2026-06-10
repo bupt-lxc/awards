@@ -7,7 +7,7 @@ database:
   host: "1Panel-mysql-lAXR"
   port: 3306
   username: "awards_management"
-  password: "mRzjTaK5N6y!@sQF"
+  password: "change-me"
   dbname: "awards_management"
   charset: "utf8mb4"
   parseTime: true
@@ -17,12 +17,13 @@ database:
   connMaxLifetime: 3600 # seconds
 
 jwt:
-  secret: "W8!kLp2zQe7xVbNm"
+  secret: "change-me"
   expireHours: 8
 
 cors:
   allowOrigins:
-    - "*"
+    # 开发环境用 localhost:3000（Vite dev server），生产用 Nginx 反向代理无需 CORS
+    - "http://localhost:3000"
   allowMethods:
     - "GET"
     - "POST"

@@ -5,6 +5,7 @@ import (
 	"awards-management/models"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -56,7 +57,7 @@ func InitDatabase() error {
 	})
 	if err != nil {
 		log.Printf("数据库连接失败: %v", err)
-		log.Printf("DSN: %s", dsn)
+		log.Printf("DSN: %s:***@tcp(%s:%d)/%s", dbConfig.Username, dbConfig.Host, dbConfig.Port, dbConfig.DBName)
 		return fmt.Errorf("数据库连接失败: %v", err)
 	}
 
@@ -95,7 +96,6 @@ func InitDatabase() error {
 	}
 
 	log.Println("数据库初始化完成")
-	log.Println("默认管理员账户: admin / admin123")
 	return nil
 }
 
@@ -108,8 +108,14 @@ func createDefaultAdmin() error {
 		return nil // 已存在，不需要创建
 	}
 
+	// 默认密码：优先环境变量 ADMIN_DEFAULT_PASSWORD，fallback admin123
+	defaultPassword := os.Getenv("ADMIN_DEFAULT_PASSWORD")
+	if defaultPassword == "" {
+		defaultPassword = "admin123"
+	}
+
 	// 使用 bcrypt 生成密码哈希 (cost=12)
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), 12)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), 12)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %v", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"awards-management/database"
 	"awards-management/middleware"
 	"awards-management/routes"
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -68,9 +70,14 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", config.AppConfig.Server.Host, config.AppConfig.Server.Port)
 	log.Printf("服务器启动在: %s", addr)
 
-	// 优雅关闭
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+
+	// 在 goroutine 中启动，主线程等待信号
 	go func() {
-		if err := r.Run(addr); err != nil {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
@@ -81,6 +88,13 @@ func main() {
 	<-quit
 
 	log.Println("正在关闭服务器...")
+
+	// 30 秒超时优雅关闭 HTTP 服务
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("HTTP server shutdown error: %v", err)
+	}
 
 	// 关闭数据库连接
 	if err := database.CloseDatabase(); err != nil {
@@ -97,6 +111,5 @@ func printStartupInfo() {
 	fmt.Println("启动中...")
 	fmt.Printf("API地址: http://%s:%d\n", config.AppConfig.Server.Host, config.AppConfig.Server.Port)
 	fmt.Printf("健康检查: http://%s:%d/health\n", config.AppConfig.Server.Host, config.AppConfig.Server.Port)
-	fmt.Println("默认管理员账户: admin / admin123")
 	fmt.Println(strings.Repeat("=", 50))
 }
