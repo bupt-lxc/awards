@@ -36,7 +36,7 @@ func (ac *AwardController) QueryPersonAwards(c *gin.Context) {
 		return
 	}
 
-	awards, err := ac.personAwardService.QueryPersonAwards(query)
+	awards, total, err := ac.personAwardService.QueryPersonAwards(query)
 	if err != nil {
 		serverError(c, "查询失败", err)
 		return
@@ -44,10 +44,11 @@ func (ac *AwardController) QueryPersonAwards(c *gin.Context) {
 
 	c.JSON(http.StatusOK, dto.QueryResponse{
 		Awards: awards,
-		Total:  len(awards),
+		Total:  int(total),
 		QueryParams: map[string]interface{}{
 			"year": query.Year, "person_name": query.PersonName,
 			"id_number": query.IDNumber, "category": query.Category,
+			"page": query.Page, "page_size": query.PageSize,
 		},
 	})
 }
@@ -59,12 +60,15 @@ func (ac *AwardController) QueryGroupAwards(c *gin.Context) {
 		return
 	}
 
-	if query.Year == nil && query.PersonName == "" && query.IDNumber == "" && query.GroupName == "" && query.Category == "" {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Error: "请至少提供一个查询条件"})
+	// 至少提供一个查询条件：按成员查需 name+id_number 配对，其他条件可单独使用
+	hasMemberQuery := query.PersonName != "" && query.IDNumber != ""
+	hasOtherQuery := query.Year != nil || query.GroupName != "" || query.Category != ""
+	if !hasMemberQuery && !hasOtherQuery {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Error: "请至少提供一个查询条件（团体名/年份/组别/成员姓名+证件号）"})
 		return
 	}
 
-	awards, err := ac.groupAwardService.QueryGroupAwards(query)
+	awards, total, err := ac.groupAwardService.QueryGroupAwards(query)
 	if err != nil {
 		serverError(c, "查询失败", err)
 		return
@@ -72,10 +76,11 @@ func (ac *AwardController) QueryGroupAwards(c *gin.Context) {
 
 	c.JSON(http.StatusOK, dto.QueryResponse{
 		Awards: awards,
-		Total:  len(awards),
+		Total:  int(total),
 		QueryParams: map[string]interface{}{
 			"person_name": query.PersonName, "id_number": query.IDNumber,
 			"year": query.Year, "group_name": query.GroupName, "category": query.Category,
+			"page": query.Page, "page_size": query.PageSize,
 		},
 	})
 }

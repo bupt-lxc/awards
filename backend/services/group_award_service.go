@@ -19,15 +19,17 @@ func NewGroupAwardService() *GroupAwardService {
 	return &GroupAwardService{}
 }
 
-func (s *GroupAwardService) QueryGroupAwards(query dto.GroupAwardQuery) ([]map[string]interface{}, error) {
+func (s *GroupAwardService) QueryGroupAwards(query dto.GroupAwardQuery) ([]map[string]interface{}, int64, error) {
 	var awards []models.GroupAward
+	var total int64
 
 	dbQuery := database.DB.Model(&models.GroupAward{}).
 		Preload("GroupMembers").
 		Order("created_at DESC")
 
-	dbQuery = dbQuery.Where("group_name LIKE ?", "%"+query.GroupName+"%")
-
+	if query.GroupName != "" {
+		dbQuery = dbQuery.Where("group_name LIKE ?", "%"+query.GroupName+"%")
+	}
 	if query.Year != nil {
 		dbQuery = dbQuery.Where("year = ?", *query.Year)
 	}
@@ -39,11 +41,28 @@ func (s *GroupAwardService) QueryGroupAwards(query dto.GroupAwardQuery) ([]map[s
 			query.PersonName, query.IDNumber)
 	}
 
-	if err := dbQuery.Find(&awards).Error; err != nil {
-		return nil, fmt.Errorf("查询团队信息失败: %v", err)
+	// 先统计总数
+	if err := dbQuery.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("查询团队信息失败: %v", err)
 	}
 
-	log.Printf("查询到 %d 条团队记录", len(awards))
+	// 分页：page>0 时分页，否则返回全部（向下兼容）
+	if query.Page > 0 {
+		pageSize := query.PageSize
+		if pageSize <= 0 {
+			pageSize = 20
+		}
+		if pageSize > 100 {
+			pageSize = 100
+		}
+		dbQuery = dbQuery.Offset((query.Page - 1) * pageSize).Limit(pageSize)
+	}
+
+	if err := dbQuery.Find(&awards).Error; err != nil {
+		return nil, 0, fmt.Errorf("查询团队信息失败: %v", err)
+	}
+
+	log.Printf("查询到 %d 条团队记录 (总计 %d)", len(awards), total)
 
 	resultAwards := make([]map[string]interface{}, 0, len(awards))
 
@@ -84,7 +103,7 @@ func (s *GroupAwardService) QueryGroupAwards(query dto.GroupAwardQuery) ([]map[s
 		resultAwards = append(resultAwards, awardMap)
 	}
 
-	return resultAwards, nil
+	return resultAwards, total, nil
 }
 
 func (s *GroupAwardService) CreateGroupAward(record dto.GroupAwardRecord) (*models.GroupAward, error) {

@@ -16,11 +16,12 @@ func NewPersonAwardService() *PersonAwardService {
 	return &PersonAwardService{}
 }
 
-func (s *PersonAwardService) QueryPersonAwards(query dto.PersonAwardQuery) ([]models.PersonAward, error) {
+func (s *PersonAwardService) QueryPersonAwards(query dto.PersonAwardQuery) ([]models.PersonAward, int64, error) {
 	var awards []models.PersonAward
-	db := database.DB.Model(&models.PersonAward{})
+	var total int64
 
-	db = db.Where("person_name = ? AND id_number = ?", query.PersonName, query.IDNumber)
+	db := database.DB.Model(&models.PersonAward{}).
+		Where("person_name = ? AND id_number = ?", query.PersonName, query.IDNumber)
 
 	if query.Year != nil {
 		db = db.Where("year = ?", *query.Year)
@@ -29,8 +30,25 @@ func (s *PersonAwardService) QueryPersonAwards(query dto.PersonAwardQuery) ([]mo
 		db = db.Where("category = ?", query.Category)
 	}
 
-	err := db.Find(&awards).Error
-	return awards, err
+	// 先统计总数
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页：page>0 时分页，否则返回全部（向下兼容）
+	if query.Page > 0 {
+		pageSize := query.PageSize
+		if pageSize <= 0 {
+			pageSize = 20
+		}
+		if pageSize > 100 {
+			pageSize = 100
+		}
+		db = db.Offset((query.Page - 1) * pageSize).Limit(pageSize)
+	}
+
+	err := db.Order("created_at DESC").Find(&awards).Error
+	return awards, total, err
 }
 
 func (s *PersonAwardService) CreatePersonAward(record dto.PersonAwardRecord) (*models.PersonAward, error) {
