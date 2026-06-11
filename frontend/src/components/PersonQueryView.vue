@@ -159,14 +159,14 @@
             class="award-card"
           >
             <div class="award-header">
-              <h3 class="award-title">{{ award.person_name }}</h3>
+              <h3 class="award-title">{{ queryForm.query_type === 'group' ? award.group_name : award.person_name }}</h3>
               <a-tag :color="getAwardLevelColor(award.award_level)" class="award-level-tag">
                 {{ award.award_level }}
               </a-tag>
             </div>
             <div class="award-info-list">
-              <div class="info-row"><span class="info-label">姓名/团队名称：</span><span class="info-value">{{ award.person_name }}</span></div>
-              <div class="info-row"><span class="info-label">证书编码：</span><span class="info-value">{{ award.id_number }}</span></div>
+              <div class="info-row"><span class="info-label">姓名/团队名称：</span><span class="info-value">{{ queryForm.query_type === 'group' ? award.group_name : award.person_name }}</span></div>
+              <div class="info-row"><span class="info-label">证书编码：</span><span class="info-value">{{ queryForm.query_type === 'group' ? '-' : award.id_number }}</span></div>
               <div class="info-row"><span class="info-label">组别：</span><span class="info-value">{{ award.category || '-' }}</span></div>
               <div class="info-row"><span class="info-label">获奖年份：</span><span class="info-value">{{ award.year }}年</span></div>
               <div class="info-row"><span class="info-label">奖项等级：</span><span class="info-value"><a-tag :color="getAwardLevelColor(award.award_level)">{{ award.award_level }}</a-tag></span></div>
@@ -204,7 +204,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SearchOutlined, ReloadOutlined, EyeOutlined, DownloadOutlined, ArrowLeftOutlined, CloseOutlined } from '@ant-design/icons-vue'
-import { queryPersonAwards } from '../api/index.js'
+import { queryPersonAwards, queryGroupAwards } from '../api/index.js'
 import QRCode from 'qrcode'
 import CaptchaInput from './CaptchaInput.vue'
 import { fireConfetti } from '../utils/confetti'
@@ -408,13 +408,18 @@ export default {
         if (queryForm.query_type === 'person') {
           queryParams.person_name = queryForm.person_name;
         } else {
-          queryParams.person_name = queryForm.group_name;
+          queryParams.group_name = queryForm.group_name;
         }
         
         console.log('查询参数:', queryParams); // 添加调试日志
-        
-        const response = await queryPersonAwards(queryParams)
-        queryResults.value = response.awards || []
+
+        let response;
+        if (queryForm.query_type === 'group') {
+          response = await queryGroupAwards(queryParams);
+        } else {
+          response = await queryPersonAwards(queryParams);
+        }
+        queryResults.value = (response.awards || []).map(a => ({ ...a, award_type: queryForm.query_type }))
         if (queryResults.value.length === 0) {
           message.info('未找到符合条件的获奖记录')
         } else {
@@ -539,7 +544,7 @@ export default {
         const url = await composeCertificateImage(award);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${award.person_name || 'certificate'}.png`;
+        link.download = `${award.group_name || award.person_name || 'certificate'}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

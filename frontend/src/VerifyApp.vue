@@ -259,17 +259,27 @@
       award_id: parseInt(urlParams.get('award_id'))
     }
 
-    // 检查必需参数
-    const requiredParams = ['type', 'person_name', 'id_number', 'year', 'category']
-    for (const param of requiredParams) {
-      if (!params[param]) {
-        throw new Error(`缺少必要参数: ${param}`)
-      }
+    // 检查必需参数 — 区分个人和团体
+    if (!params.type) {
+      throw new Error('缺少必要参数: type')
     }
 
-    // 如果是团体查询，group_name 也是必需的
-    if (params.type === 'group' && !params.group_name) {
-      throw new Error('团体查询缺少必要参数: group_name')
+    if (params.type === 'person') {
+      const requiredPersonParams = ['person_name', 'id_number', 'year', 'category']
+      for (const param of requiredPersonParams) {
+        if (!params[param]) {
+          throw new Error(`缺少必要参数: ${param}`)
+        }
+      }
+    } else if (params.type === 'group') {
+      const requiredGroupParams = ['group_name', 'year', 'category']
+      for (const param of requiredGroupParams) {
+        if (!params[param]) {
+          throw new Error(`缺少必要参数: ${param}`)
+        }
+      }
+    } else {
+      throw new Error(`无效的查询类型: ${params.type}`)
     }
 
     return params
@@ -308,15 +318,15 @@
       }
       console.log(response);
       if (response && response.awards && response.awards.length > 0) {
-        // 如果有多个结果，尝试根据奖项ID精确匹配
-        let targetAward = null
+        // 优先根据 award_id 精确匹配，否则取第一条
+        let targetAward = response.awards[0]
         if (params.award_id) {
           const exactMatch = response.awards.find(award => award.id === params.award_id)
           if (exactMatch) {
             targetAward = exactMatch
           }
         }
-        
+
         if (!targetAward) {
           awardInfo.value = null
           error.value = '未找到匹配的获奖记录';

@@ -417,12 +417,16 @@ const onQuery = async () => {
     
     // 根据查询类型调用不同的API
     let response;
+    console.log('[PublicQueryView] 查询类型:', queryForm.query_type, '查询参数:', JSON.stringify(queryParams));
     if (queryForm.query_type === 'group') {
       response = await awardAPI.queryGroupAwards(queryParams);
     } else {
       response = await awardAPI.queryPersonAwards(queryParams);
     }
-    queryResults.value = response.awards || [];
+    console.log('[PublicQueryView] 原始返回:', JSON.stringify(response));
+    // 给每条结果标记 award_type，模板用它区分渲染
+    const awardType = queryForm.query_type === 'group' ? 'group' : 'person';
+    queryResults.value = (response.awards || []).map(a => ({ ...a, award_type: awardType }));
     
     message.success(`查询完成，找到 ${queryResults.value.length} 条记录`);
     

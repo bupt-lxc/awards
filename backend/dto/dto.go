@@ -23,8 +23,8 @@ type TokenResponse struct {
 // PersonAwardQuery 个人获奖查询请求
 type PersonAwardQuery struct {
 	Year       *int   `json:"year,omitempty"`
-	PersonName string `json:"person_name" binding:"required,max=100"`
-	IDNumber   string `json:"id_number" binding:"required,max=50"`
+	PersonName string `json:"person_name,omitempty" binding:"max=100"`
+	IDNumber   string `json:"id_number,omitempty" binding:"max=50"`
 	Category   string `json:"category,omitempty" binding:"max=100"`
 	Page       int    `json:"page,omitempty"`      // 页码，从1开始；为0时不分页
 	PageSize   int    `json:"page_size,omitempty"` // 每页条数，默认20，最大100

@@ -20,9 +20,14 @@ func (s *PersonAwardService) QueryPersonAwards(query dto.PersonAwardQuery) ([]mo
 	var awards []models.PersonAward
 	var total int64
 
-	db := database.DB.Model(&models.PersonAward{}).
-		Where("person_name = ? AND id_number = ?", query.PersonName, query.IDNumber)
+	db := database.DB.Model(&models.PersonAward{})
 
+	if query.PersonName != "" {
+		db = db.Where("person_name = ?", query.PersonName)
+	}
+	if query.IDNumber != "" {
+		db = db.Where("id_number = ?", query.IDNumber)
+	}
 	if query.Year != nil {
 		db = db.Where("year = ?", *query.Year)
 	}
