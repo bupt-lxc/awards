@@ -1,13 +1,13 @@
 server:
   host: "0.0.0.0"
   port: 8000
-  mode: "release" # debug, release, test
+  mode: "debug" # debug, release, test
 
 database:
-  host: "1Panel-mysql-lAXR"
+  host: "127.0.0.1"
   port: 3306
-  username: "awards_management"
-  password: "change-me"
+  username: "awards_user"
+  password: "awards_pass123"
   dbname: "awards_management"
   charset: "utf8mb4"
   parseTime: true
@@ -17,7 +17,7 @@ database:
   connMaxLifetime: 3600 # seconds
 
 jwt:
-  secret: "change-me"
+  secret: "awards-dev-jwt-secret-key-2026-please-change-in-production"
   expireHours: 8
 
 cors:

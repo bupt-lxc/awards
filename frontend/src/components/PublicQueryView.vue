@@ -33,12 +33,13 @@
             </a-col>
 
             <a-col :xs="24" :sm="12" :md="6">
-              <a-form-item label="获奖年份" name="year" :rules="yearRules">
-                <a-select 
-                  v-model:value="queryForm.year" 
-                  placeholder="请选择年份"
+              <a-form-item label="获奖年份" name="year">
+                <a-select
+                  v-model:value="queryForm.year"
+                  placeholder="请选择年份（可选）"
                   size="large"
                   show-search
+                  allow-clear
                 >
                   <a-select-option v-for="year in availableYears" :key="year" :value="year">
                     {{ year }}年
@@ -48,37 +49,21 @@
             </a-col>
             
             <a-col :xs="24" :sm="12" :md="6" v-if="queryForm.query_type === 'group'">
-              <a-form-item label="团队名称" name="group_name" :rules="groupNameRules">
-                <a-select
+              <a-form-item label="团队名称" name="group_name">
+                <a-input
                   v-model:value="queryForm.group_name"
-                  placeholder="请选择或输入团队名称"
+                  placeholder="输入团队名称（可选）"
                   size="large"
-                  show-search
-                  :options="groupNameOptions"
-                  :filter-option="filterOption"
                   allow-clear
-                >
-                  <template #dropdownRender="{ menuNode: menu }">
-                    <v-nodes :vnodes="menu" />
-                    <a-divider style="margin: 4px 0" />
-                    <div style="padding: 4px 8px">
-                      <a-input 
-                        v-model:value="queryForm.custom_group_name"
-                        placeholder="输入其他团队名称"
-                        size="small"
-                        @pressEnter="addCustomGroup"
-                      />
-                    </div>
-                  </template>
-                </a-select>
+                />
               </a-form-item>
             </a-col>
             
             <a-col :xs="24" :sm="12" :md="6" v-if="queryForm.query_type === 'person'">
-              <a-form-item label="个人姓名" name="person_name" :rules="personNameRules">
-                <a-input 
-                  v-model:value="queryForm.person_name" 
-                  placeholder="输入个人姓名"
+              <a-form-item label="个人姓名" name="person_name">
+                <a-input
+                  v-model:value="queryForm.person_name"
+                  placeholder="输入个人姓名（可选）"
                   size="large"
                   allow-clear
                 />
@@ -86,10 +71,10 @@
             </a-col>
             
             <a-col :xs="24" :sm="12" :md="6">
-              <a-form-item label="参赛编码" name="id_number" :rules="idNumberRules">
-                <a-input 
-                  v-model:value="queryForm.id_number" 
-                  placeholder="输入参赛编码"
+              <a-form-item label="参赛编码" name="id_number">
+                <a-input
+                  v-model:value="queryForm.id_number"
+                  placeholder="输入参赛编码（可选）"
                   size="large"
                   allow-clear
                 />
@@ -413,7 +398,7 @@ const onQuery = async () => {
     hasQueried.value = true;
     
     const queryParams = {
-      year: queryForm.year
+      year: queryForm.year || undefined
     };
     
     // 只有在字段有值时才添加到查询参数
@@ -430,8 +415,13 @@ const onQuery = async () => {
       queryParams.category = queryForm.category.trim();
     }
     
-    // 统一使用个人奖项查询API
-    const response = await awardAPI.queryPersonAwards(queryParams);
+    // 根据查询类型调用不同的API
+    let response;
+    if (queryForm.query_type === 'group') {
+      response = await awardAPI.queryGroupAwards(queryParams);
+    } else {
+      response = await awardAPI.queryPersonAwards(queryParams);
+    }
     queryResults.value = response.awards || [];
     
     message.success(`查询完成，找到 ${queryResults.value.length} 条记录`);

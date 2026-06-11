@@ -60,11 +60,10 @@ func (ac *AwardController) QueryGroupAwards(c *gin.Context) {
 		return
 	}
 
-	// 至少提供一个查询条件：按成员查需 name+id_number 配对，其他条件可单独使用
-	hasMemberQuery := query.PersonName != "" && query.IDNumber != ""
-	hasOtherQuery := query.Year != nil || query.GroupName != "" || query.Category != ""
-	if !hasMemberQuery && !hasOtherQuery {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Error: "请至少提供一个查询条件（团体名/年份/组别/成员姓名+证件号）"})
+	// 至少提供一个查询条件
+	hasAnyQuery := query.PersonName != "" || query.IDNumber != "" || query.Year != nil || query.GroupName != "" || query.Category != ""
+	if !hasAnyQuery {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Error: "请至少提供一个查询条件（团体名/年份/组别/证件号/姓名）"})
 		return
 	}
 

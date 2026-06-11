@@ -36,9 +36,13 @@ func (s *GroupAwardService) QueryGroupAwards(query dto.GroupAwardQuery) ([]map[s
 	if query.Category != "" {
 		dbQuery = dbQuery.Where("category = ?", query.Category)
 	}
-	if query.PersonName != "" && query.IDNumber != "" {
-		dbQuery = dbQuery.Where("EXISTS (SELECT 1 FROM group_members WHERE group_award_id = group_awards.id AND member_name = ? AND member_id_number = ?)",
-			query.PersonName, query.IDNumber)
+	if query.PersonName != "" {
+		dbQuery = dbQuery.Where("EXISTS (SELECT 1 FROM group_members WHERE group_award_id = group_awards.id AND member_name = ?)",
+			query.PersonName)
+	}
+	if query.IDNumber != "" {
+		dbQuery = dbQuery.Where("EXISTS (SELECT 1 FROM group_members WHERE group_award_id = group_awards.id AND member_id_number = ?)",
+			query.IDNumber)
 	}
 
 	// 先统计总数
