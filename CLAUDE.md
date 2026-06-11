@@ -127,12 +127,29 @@ API 返回数据不含 `award_type` 字段，但模板用 `record.award_type ===
 | `frontend/dist/` | 前端生产构建产物（已提交到 Git） |
 
 ### 服务器部署步骤
+
+#### 方案一：HTTPS clone（代理）
 ```bash
-# 1. Clone 项目
+# 服务器配了代理的话
 git clone https://github.com/Lonlybutfull/awards.git /opt/awards
+```
+
+#### 方案二：SSH clone（推荐，不受 GFW 干扰）
+```bash
+# 1. 服务器生成 SSH 密钥
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+cat ~/.ssh/id_ed25519.pub
+
+# 2. 打开 https://github.com/settings/ssh/new 把公钥贴上
+# 3. Clone
+git clone git@github.com:Lonlybutfull/awards.git /opt/awards
+```
+
+#### 统一继续
+```bash
 cd /opt/awards
 
-# 2. 创建 .env（按服务器实际密码填写）
+# 创建 .env（按服务器实际密码填写）
 cat > backend/.env << 'EOF'
 DB_ROOT_PASSWORD=<MySQL root 密码>
 DB_USER=awards_user
@@ -142,10 +159,10 @@ JWT_SECRET=<随机字符串，建议 openssl rand -hex 32>
 GIN_MODE=release
 EOF
 
-# 3. 启动所有服务（--build 强制重新编译后端）
+# 启动所有服务（--build 强制重新编译后端）
 docker compose -f backend/docker-compose.yml up -d --build
 
-# 4. 查看运行状态
+# 查看运行状态
 docker compose -f backend/docker-compose.yml ps
 ```
 
