@@ -112,9 +112,66 @@ API 返回数据不含 `award_type` 字段，但模板用 `record.award_type ===
 - 存储路径: `backend/uploads/certificates/`
 - URL 路由: `/static/certificates/<filename>`
 
+## 生产环境部署
+
+### 部署方式：Docker Compose
+服务器只需 Docker + Docker Compose，无需安装 Go/Node.js/MySQL。
+
+### 部署文件说明
+| 文件 | 用途 |
+|------|------|
+| `backend/docker-compose.yml` | 编排 MySQL、Go 后端、Nginx 三个容器 |
+| `backend/Dockerfile` | 两阶段构建：golang:1.21-alpine 编译 → alpine:3.19 运行 |
+| `backend/nginx.conf` | Nginx 配置：前端静态文件 + API 反向代理 + 证书静态资源 |
+| `backend/.env` | 环境变量（不提交到 Git，需手动创建） |
+| `frontend/dist/` | 前端生产构建产物（已提交到 Git） |
+
+### 服务器部署步骤
+```bash
+# 1. Clone 项目
+git clone https://github.com/Lonlybutfull/awards.git /opt/awards
+cd /opt/awards
+
+# 2. 创建 .env（按服务器实际密码填写）
+cat > backend/.env << 'EOF'
+DB_ROOT_PASSWORD=<MySQL root 密码>
+DB_USER=awards_user
+DB_PASSWORD=<数据库用户密码>
+DB_NAME=awards_management
+JWT_SECRET=<随机字符串，建议 openssl rand -hex 32>
+GIN_MODE=release
+EOF
+
+# 3. 启动所有服务（--build 强制重新编译后端）
+docker compose -f backend/docker-compose.yml up -d --build
+
+# 4. 查看运行状态
+docker compose -f backend/docker-compose.yml ps
+```
+
+### 启动后访问
+| 页面 | URL | 说明 |
+|------|-----|------|
+| 公共查询 | `http://<服务器IP>/` | 无需登录 |
+| 后台管理 | `http://<服务器IP>/admin.html` | admin / admin123 |
+| 证书验证 | `http://<服务器IP>/verify.html` | 通过查询结果页链接进入 |
+
+### 容器说明
+| 容器名 | 镜像 | 端口 | 说明 |
+|--------|------|------|------|
+| `awards-mysql` | mysql:8.0 | 127.0.0.1:3306 | 仅容器间访问 |
+| `awards-backend` | 自编译 | 8000 (内部) | Go Gin API |
+| `awards-nginx` | nginx:1.25-alpine | 80:80 | 对外入口 |
+
+### 首次部署注意事项
+1. 数据库初始化后 `admins` 表会自动插入默认管理员（admin/admin123），密码为 bcrypt 哈希
+2. `backend/uploads/` 通过 Docker volume 持久化，证书图片不会因容器重启丢失
+3. `.env` 文件不要提交到 Git（已在 .gitignore 中）
+4. 证书图片所在的 volume `uploads_data` 如需备份：`docker cp awards-backend:/app/uploads/certificates ./backup/`
+
 ## 注意事项
 - 当前 shell 需手动 `export PATH="$PATH:/c/Program Files/Go/bin"` 才能用 go 命令（Go 安装时 shell 未加载新 PATH）
-- GitHub (`https://github.com/Lonlybutfull/awards`) 通过 WebFetch/curl 均无法访问，可能被企业网络拦截
+- GitHub (`https://github.com/Lonlybutfull/awards`) 通过 WebFetch/curl 均无法访问，可能被企业网络拦截；push 时可临时切手机热点
 - 项目本身无种子数据脚本，数据通过后台管理页面录入
 - `package-lock.json` 变动为 npm 版本差异，不影响功能
-- 每次启动需检查端口占用：旧进程可能导致端口冲突（8000 后端 / 3000 前端），需手动 kill 后再启
+- 每次本地启动需检查端口占用：旧进程可能导致端口冲突（8000 后端 / 3000 前端），需手动 kill 后再启
