@@ -6,11 +6,20 @@ import { resolve } from 'path'
 export default defineConfig({
   plugins: [vue()],
   build: {
+    target: 'es2015',
+    cssCodeSplit: true,
+    minify: 'esbuild',
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
         admin: resolve(__dirname, 'admin.html'),
         verify: resolve(__dirname, 'verify.html')
+      },
+      output: {
+        manualChunks: {
+          'ant-design-vue': ['ant-design-vue'],
+          'vendor': ['axios', 'vue-router'],
+        }
       }
     }
   },

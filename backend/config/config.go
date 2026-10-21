@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -12,6 +14,15 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	CORS     CORSConfig     `mapstructure:"cors"`
+	Storage  StorageConfig  `mapstructure:"storage"`
+}
+
+type StorageConfig struct {
+	SecretID  string `mapstructure:"secretId"`
+	SecretKey string `mapstructure:"secretKey"`
+	Region    string `mapstructure:"region"`
+	Bucket    string `mapstructure:"bucket"`
+	PublicURL string `mapstructure:"publicUrl"`
 }
 
 type ServerConfig struct {
@@ -66,6 +77,7 @@ func LoadConfig(configPath string) error {
 	viper.SetDefault("database.connMaxLifetime", 3600)
 	viper.SetDefault("jwt.expireHours", 8)
 	viper.SetDefault("cors.allowCredentials", true)
+	viper.SetDefault("storage.publicUrl", "/static/certificates")
 
 	// 环境变量绑定 — 优先级高于 config.yaml
 	// Server
@@ -78,6 +90,12 @@ func LoadConfig(configPath string) error {
 	_ = viper.BindEnv("database.dbname", "DB_NAME")
 	// JWT
 	_ = viper.BindEnv("jwt.secret", "JWT_SECRET")
+	// Storage (COS)
+	_ = viper.BindEnv("storage.secretId", "COS_SECRET_ID")
+	_ = viper.BindEnv("storage.secretKey", "COS_SECRET_KEY")
+	_ = viper.BindEnv("storage.region", "COS_REGION")
+	_ = viper.BindEnv("storage.bucket", "COS_BUCKET")
+	_ = viper.BindEnv("storage.publicUrl", "COS_PUBLIC_URL")
 
 	viper.AutomaticEnv()
 
@@ -90,6 +108,11 @@ func LoadConfig(configPath string) error {
 	if err := viper.Unmarshal(AppConfig); err != nil {
 		log.Printf("Error unmarshaling config: %v", err)
 		return err
+	}
+
+	jwtSecret := strings.TrimSpace(AppConfig.JWT.Secret)
+	if AppConfig.Server.Mode == "release" && (len(jwtSecret) < 32 || strings.Contains(strings.ToLower(jwtSecret), "change-me")) {
+		return fmt.Errorf("release 模式必须通过 JWT_SECRET 配置至少 32 位的非占位密钥")
 	}
 
 	AppConfig.Database.ConnMaxLifetime *= time.Second

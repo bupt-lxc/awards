@@ -288,6 +288,13 @@
       <img src="../assets/cca-logo.png" alt="中国合唱协会" class="org-logo" />
       <img src="../assets/cccf-logo.png" alt="中国少年儿童合唱节" class="festival-logo" />
     </div>
+
+    <!-- ICP备案号 -->
+    <div class="icp-container">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="icp-link">
+        备案/许可证编号为：苏ICP备2026042125号
+      </a>
+    </div>
   </div>
 </template>
 
@@ -986,6 +993,25 @@ onMounted(() => {
   height: 100px;
   width: auto;
   object-fit: contain;
+}
+
+.icp-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+  padding: 8px 0 20px 0;
+}
+
+.icp-link {
+  color: #666;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.icp-link:hover {
+  color: #1677ff;
 }
 
 /* 查询类型单选按钮样式 */

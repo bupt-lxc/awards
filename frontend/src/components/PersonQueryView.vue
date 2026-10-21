@@ -32,8 +32,8 @@
             </a-col>
 
             <a-col :xs="24" :sm="12" :md="6">
-              <a-form-item label="获奖年份" name="year" :rules="[{ required: true, message: '请选择获奖年份' }]">
-                <a-select 
+              <a-form-item label="获奖年份" name="year">
+                <a-select
                   v-model:value="queryForm.year" 
                   placeholder="请选择年份"
                   size="large"
@@ -59,6 +59,9 @@
                   size="large"
                   :options="filteredGroupOptions"
                   @search="handleGroupSearch"
+                  :filter-option="false"
+                  allow-clear
+                  :default-active-first-option="false"
                   class="team-name-select"
                   :dropdownStyle="{ maxHeight: '400px', overflow: 'auto' }"
                 >
@@ -68,9 +71,9 @@
                     </div>
                   </template>
                 </a-auto-complete>
-                <a-input 
+                <a-input
                   v-else
-                  v-model:value="queryForm.person_name" 
+                  v-model:value="queryForm.person_name"
                   placeholder="输入个人姓名"
                   size="large"
                   allow-clear
@@ -79,7 +82,7 @@
             </a-col>
             
             <a-col :xs="24" :sm="12" :md="6">
-              <a-form-item label="证书编码" name="id_number" :rules="[{ required: true, message: '请输入证书编码' }]">
+              <a-form-item label="证书编码" name="id_number">
                 <a-input 
                   v-model:value="queryForm.id_number" 
                   placeholder="输入证书编码"
@@ -166,13 +169,14 @@
             </div>
             <div class="award-info-list">
               <div class="info-row"><span class="info-label">姓名/团队名称：</span><span class="info-value">{{ queryForm.query_type === 'group' ? award.group_name : award.person_name }}</span></div>
-              <div class="info-row"><span class="info-label">证书编码：</span><span class="info-value">{{ queryForm.query_type === 'group' ? '-' : award.id_number }}</span></div>
+              <div class="info-row" v-if="queryForm.query_type !== 'group'"><span class="info-label">证件号码：</span><span class="info-value">{{ award.id_number }}</span></div>
+              <div class="info-row"><span class="info-label">证书编号：</span><span class="info-value">{{ award.certificate_number || '-' }}</span></div>
               <div class="info-row"><span class="info-label">组别：</span><span class="info-value">{{ award.category || '-' }}</span></div>
               <div class="info-row"><span class="info-label">获奖年份：</span><span class="info-value">{{ award.year }}年</span></div>
               <div class="info-row"><span class="info-label">奖项等级：</span><span class="info-value"><a-tag :color="getAwardLevelColor(award.award_level)">{{ award.award_level }}</a-tag></span></div>
               <div class="info-row" v-if="award.description"><span class="info-label">获奖说明：</span><span class="info-value">{{ award.description }}</span></div>
             </div>
-            <div class="award-actions" v-if="award.certificate_image">
+            <div class="award-actions" v-if="queryForm.query_type !== 'group' && award.certificate_image">
               <div class="action-btns-center">
                 <a-button type="default" size="large" class="action-btn view-btn" @click="viewCertificate(award)">
                   <template #icon><EyeOutlined /></template>
@@ -182,6 +186,31 @@
                   <template #icon><DownloadOutlined /></template>
                   下载证书
                 </a-button>
+              </div>
+            </div>
+
+            <!-- 团队成员及证书（团队查询） -->
+            <div class="members-section" v-if="queryForm.query_type === 'group' && award.members && award.members.length > 0">
+              <div class="members-title">团队成员：</div>
+              <div class="members-list">
+                <div v-for="(member, memberIndex) in award.members" :key="memberIndex" class="member-item">
+                  <div class="member-info">
+                    <span class="member-name">{{ member.name }}</span>
+                    <span class="member-id">{{ member.id_number }}</span>
+                    <span class="member-cert" v-if="member.certificate_number">证书编号: {{ member.certificate_number }}</span>
+                  </div>
+                  <div class="member-actions" v-if="member.certificate_image">
+                    <a-button type="default" size="small" class="action-btn view-btn" @click="viewMemberCertificate(award, member)">
+                      <template #icon><EyeOutlined /></template>
+                      查看证书
+                    </a-button>
+                    <a-button type="primary" size="small" class="action-btn download-btn" @click="downloadMemberCertificate(award, member)">
+                      <template #icon><DownloadOutlined /></template>
+                      下载证书
+                    </a-button>
+                  </div>
+                  <span class="member-no-cert" v-else>暂无证书</span>
+                </div>
               </div>
             </div>
           </div>
@@ -201,10 +230,10 @@
 </template>
 
 <script>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
 import { SearchOutlined, ReloadOutlined, EyeOutlined, DownloadOutlined, ArrowLeftOutlined, CloseOutlined } from '@ant-design/icons-vue'
-import { queryPersonAwards, queryGroupAwards } from '../api/index.js'
+import { queryPersonAwards, queryGroupAwards, suggestAwardNames } from '../api/index.js'
 import QRCode from 'qrcode'
 import CaptchaInput from './CaptchaInput.vue'
 import { fireConfetti } from '../utils/confetti'
@@ -291,40 +320,46 @@ export default {
 
     // 过滤后的选项
     const filteredGroupOptions = ref([])
+    let suggestionTimer = null
+    let suggestionRequestId = 0
 
-    // 搜索处理函数
-    const handleGroupSearch = (searchText) => {
-      if (!searchText) {
+    const loadGroupSuggestions = (searchText) => {
+      const keyword = String(searchText || '').trim()
+      if (suggestionTimer) {
+        clearTimeout(suggestionTimer)
+      }
+      if (!keyword) {
+        suggestionRequestId += 1
         filteredGroupOptions.value = []
         return
       }
 
-      // 将搜索文本转换为小写并分割为关键词数组
-      const keywords = searchText.toLowerCase().split(/\s+/)
-
-      // 对每个团队名称进行评分
-      const scoredOptions = groupNameOptions.value.map(option => {
-        const label = option.label.toLowerCase()
-        // 计算每个关键词的匹配分数
-        const score = keywords.reduce((acc, keyword) => {
-          if (label.includes(keyword)) {
-            // 如果关键词完全匹配，给更高的分数
-            return acc + (label === keyword ? 2 : 1)
+      const requestId = ++suggestionRequestId
+      suggestionTimer = setTimeout(async () => {
+        try {
+          const response = await suggestAwardNames('group', keyword, 10)
+          if (requestId !== suggestionRequestId) return
+          const names = Array.isArray(response?.data?.options) ? response.data.options : []
+          filteredGroupOptions.value = names.map(name => ({ value: name, label: name }))
+        } catch (error) {
+          if (requestId === suggestionRequestId) {
+            filteredGroupOptions.value = []
           }
-          return acc
-        }, 0)
-        return { ...option, score }
-      })
-
-      // 过滤出有匹配分数的选项并按分数排序
-      const matchedOptions = scoredOptions
-        .filter(option => option.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5) // 只显示前5个最匹配的结果
-        .map(({ value, label }) => ({ value, label }))
-
-      filteredGroupOptions.value = matchedOptions
+          console.error('名称联想加载失败:', error)
+        }
+      }, 250)
     }
+
+    // 搜索处理函数
+    const handleGroupSearch = (searchText) => {
+      // 实时同步输入值到 queryForm，解决 AutoComplete 不点击下拉选项时 v-model 不更新的问题
+      queryForm.group_name = searchText || ''
+      loadGroupSuggestions(searchText)
+    }
+
+    onBeforeUnmount(() => {
+      if (suggestionTimer) clearTimeout(suggestionTimer)
+    })
 
     // 初始化时设置默认选中的团队
     onMounted(() => {
@@ -480,48 +515,64 @@ export default {
     }
     const certificateModalVisible = ref(false);
     const certificateModalImg = ref('');
-    const getVerifyUrl = (award) => {
+    // 生成防伪验证链接（个人 / 团队 / 团队成员）
+    const getVerifyUrl = (award, member) => {
       const baseUrl = window.location.origin;
       const params = new URLSearchParams({
-        type: 'person',
+        type: member ? 'group' : queryForm.query_type,
         year: award.year,
-        person_name: award.person_name,
-        id_number: award.id_number,
         category: award.category || '',
         award_id: award.id
       });
+      if (member) {
+        params.set('group_name', award.group_name || '');
+        params.set('person_name', member.name || '');
+        params.set('id_number', member.id_number || '');
+      } else if (queryForm.query_type === 'group') {
+        params.set('group_name', award.group_name || '');
+      } else {
+        params.set('person_name', award.person_name || '');
+        params.set('id_number', award.id_number || '');
+      }
       return `${baseUrl}/verify.html?${params.toString()}`;
     };
-    const composeCertificateImage = async (award) => {
-      return new Promise(async (resolve, reject) => {
+    // 将证书图片与防伪二维码合成
+    const composeCertificateImage = (certImage, verifyUrl) => {
+      return new Promise((resolve, reject) => {
         try {
           const img = new window.Image();
           img.crossOrigin = 'anonymous';
-          img.src = award.certificate_image;
+          img.src = certImage;
           img.onload = async () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            const qrSize = Math.floor(Math.min(img.width, img.height) * 0.13);
-            const qrCodeDataUrl = await QRCode.toDataURL(getVerifyUrl(award), { width: qrSize, margin: 0 });
-            const qrImg = new window.Image();
-            qrImg.src = qrCodeDataUrl;
-            qrImg.onload = () => {
-              const padding = 32;
-              const qrX = img.width - qrSize - padding;
-              const qrY = padding;
-              ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
-              ctx.font = `${Math.floor(qrSize/5)}px Arial`;
-              ctx.fillStyle = '#333';
-              ctx.textAlign = 'center';
-              ctx.shadowColor = 'white';
-              ctx.shadowBlur = 2;
-              ctx.fillText('防伪标识', qrX + qrSize/2, qrY + qrSize + Math.floor(qrSize/3));
-              resolve(canvas.toDataURL('image/png'));
-            };
-            qrImg.onerror = reject;
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0);
+              const qrSize = Math.floor(Math.min(img.width, img.height) * 0.13);
+              const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, { width: qrSize, margin: 0 });
+              const qrImg = new window.Image();
+              qrImg.src = qrCodeDataUrl;
+              qrImg.onload = () => {
+                const padding = 32;
+                const qrX = img.width - qrSize - padding;
+                const qrY = padding;
+                ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+                ctx.font = `${Math.floor(qrSize/5)}px Arial`;
+                ctx.fillStyle = '#333';
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'white';
+                ctx.shadowBlur = 2;
+                ctx.fillText('防伪标识', qrX + qrSize/2, qrY + qrSize + Math.floor(qrSize/3));
+                resolve(canvas.toDataURL('image/png'));
+              };
+              qrImg.onerror = reject;
+            } catch (e) {
+              reject(e);
+            }
           };
           img.onerror = reject;
         } catch (e) {
@@ -529,28 +580,46 @@ export default {
         }
       });
     };
-    const viewCertificate = async (award) => {
+    // 查看证书大图（个人）
+    const viewCertificateImage = async (certImage, verifyUrl) => {
       certificateModalImg.value = '';
       certificateModalVisible.value = true;
       try {
-        certificateModalImg.value = await composeCertificateImage(award);
+        certificateModalImg.value = await composeCertificateImage(certImage, verifyUrl);
       } catch (e) {
         message.error('证书图片加载失败');
         certificateModalVisible.value = false;
       }
     };
-    const downloadCertificate = async (award) => {
+    const viewCertificate = (award) => {
+      return viewCertificateImage(award.certificate_image, getVerifyUrl(award));
+    };
+    // 查看证书大图（团队成员）
+    const viewMemberCertificate = (award, member) => {
+      return viewCertificateImage(member.certificate_image, getVerifyUrl(award, member));
+    };
+    // 下载证书图片
+    const downloadCertificateImage = async (certImage, verifyUrl, fileName) => {
       try {
-        const url = await composeCertificateImage(award);
+        const url = await composeCertificateImage(certImage, verifyUrl);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${award.group_name || award.person_name || 'certificate'}.png`;
+        link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       } catch (e) {
         message.error('证书图片生成失败');
       }
+    };
+    const downloadCertificate = (award) => {
+      const fileName = `${award.person_name || award.group_name || 'certificate'}.png`;
+      return downloadCertificateImage(award.certificate_image, getVerifyUrl(award), fileName);
+    };
+    // 下载证书图片（团队成员）
+    const downloadMemberCertificate = (award, member) => {
+      const fileName = `${award.group_name || ''}-${member.name || '成员'}.png`;
+      return downloadCertificateImage(member.certificate_image, getVerifyUrl(award, member), fileName);
     };
     // 判断是否为移动端
     const isMobile = computed(() => window.innerWidth <= 768)
@@ -569,6 +638,8 @@ export default {
       resetQuery,
       downloadCertificate,
       viewCertificate,
+      viewMemberCertificate,
+      downloadMemberCertificate,
       certificateModalVisible,
       certificateModalImg,
       isMobile,
@@ -807,6 +878,68 @@ export default {
   transform: translateY(-1px) scale(1.03);
 }
 
+/* 团队成员证书区域（团队查询） */
+.members-section {
+  width: 100%;
+  margin-top: 16px;
+  background: #FFF9F0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.members-title {
+  font-weight: 600;
+  color: #FFB347;
+  margin-bottom: 8px;
+  font-size: 1.05rem;
+}
+
+.members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.member-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.member-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.member-id {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.member-cert {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.member-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.member-no-cert {
+  font-size: 0.9rem;
+  color: #bbb;
+}
+
 .mobile-back-btn {
   position: fixed;
   top: 16px;
@@ -883,7 +1016,7 @@ export default {
   .award-info-list {
     margin-bottom: 10px;
   }
-  .award-actions, .action-btns-center {
+  .award-actions, .action-btns-center, .member-actions {
     flex-direction: column;
     gap: 10px;
     align-items: stretch;
@@ -976,6 +1109,10 @@ export default {
   border: 1px solid #d9d9d9;
   margin-right: 0;
   border-left-width: 1px !important;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .query-type-radio :deep(.ant-radio-button-wrapper:first-child) {

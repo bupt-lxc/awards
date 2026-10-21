@@ -27,10 +27,15 @@
                   placeholder="成员姓名" 
                   style="width: 150px;"
                 />
-                <a-input 
-                  v-model:value="newMember.id_number" 
-                  placeholder="证件号码" 
+                <a-input
+                  v-model:value="newMember.id_number"
+                  placeholder="证件号码"
                   style="width: 180px;"
+                />
+                <a-input
+                  v-model:value="newMember.certificate_number"
+                  placeholder="证书编号（可选）"
+                  style="width: 160px;"
                 />
                 <a-button type="primary" @click="addMember" :disabled="!newMember.name || !newMember.id_number">
                   添加成员
@@ -64,7 +69,7 @@
                   style="margin-bottom: 8px; padding: 8px; border: 1px solid #e8e8e8; border-radius: 4px; background: white;"
                 >
                   <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ member.name }} ({{ member.id_number }})</span>
+                    <span>{{ member.name }} ({{ member.id_number }})<template v-if="member.certificate_number"> · 证书编号:{{ member.certificate_number }}</template></span>
                     <div style="display: flex; gap: 8px; align-items: center;">
                       <span v-if="member.certificate_image" style="font-size: 12px; color: #52c41a;">📄 有证书</span>
                       <a-button v-if="member.certificate_image" size="small" type="link" @click="previewMemberCertificateInList(member)">预览证书</a-button>
@@ -77,6 +82,35 @@
             
             <div v-else style="color: #999; font-style: italic;">
               暂无成员，请添加团体成员信息
+            </div>
+          </div>
+        </a-form-item>
+
+        <!-- 团队整体证书（可选） -->
+        <a-form-item label="团队证书编号" v-if="formState.award_type === 'group'">
+          <a-input v-model:value="formState.certificate_number" placeholder="请输入团队获奖证书编号（可选）" style="width: 300px;" />
+        </a-form-item>
+
+        <a-form-item label="团队证书" v-if="formState.award_type === 'group'">
+          <div style="border: 1px solid #d9d9d9; border-radius: 6px; padding: 16px; background-color: #fafafa;">
+            <a-upload
+              :before-upload="handlePersonCertificateUpload"
+              :show-upload-list="false"
+              accept="image/*"
+              style="margin-bottom: 16px;"
+            >
+              <a-button type="dashed" style="width: 100%; height: 80px;">
+                <div>
+                  <upload-outlined style="font-size: 20px; margin-bottom: 8px;" />
+                  <div>点击上传团队整体证书图片（可选）</div>
+                  <div style="font-size: 12px; color: #999;">支持 JPG、PNG、GIF 格式</div>
+                </div>
+              </a-button>
+            </a-upload>
+            <div v-if="formState.certificate_image" style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+              <span style="font-size: 14px; color: #52c41a;">✓ 已选择证书图片</span>
+              <a-button size="small" type="link" @click="previewPersonCertificate">预览</a-button>
+              <a-button size="small" type="link" danger @click="removePersonCertificate">删除</a-button>
             </div>
           </div>
         </a-form-item>
@@ -101,6 +135,11 @@
 
         <a-form-item label="描述" name="description">
           <a-textarea v-model:value="formState.description" placeholder="请输入获奖描述（可选）" :rows="3" />
+        </a-form-item>
+
+        <!-- 个人获奖证书编号 -->
+        <a-form-item label="证书编号" name="certificate_number" v-if="formState.award_type === 'person'">
+          <a-input v-model:value="formState.certificate_number" placeholder="请输入获奖证书编号" />
         </a-form-item>
 
         <!-- 个人获奖证书图片上传 -->
@@ -168,21 +207,36 @@
 
         <div style="margin-bottom: 24px;">
           <div style="font-size: 14px; margin-bottom: 12px;">2. 上传证书图片（可选）：</div>
-          <a-upload
-            :before-upload="handleBatchImageUpload"
-            :multiple="true"
-            :show-upload-list="true"
+          <input
+            ref="batchImageInput"
+            type="file"
+            multiple
             accept="image/*"
-            class="upload-area"
-            v-model:fileList="batchImageFiles"
-          >
-            <a-button type="dashed" size="large" style="width: 100%;">
-              <div>
-                <upload-outlined style="font-size: 16px; margin-right: 8px;" />
-                <span>选择证书图片</span>
-              </div>
-            </a-button>
-          </a-upload>
+            style="display: none"
+            @change="handleBatchImagesSelected"
+          />
+          <a-button type="dashed" size="large" style="width: 100%;" @click="batchImageInput?.click()" :loading="batchImageUploading">
+            <div>
+              <upload-outlined style="font-size: 16px; margin-right: 8px;" />
+              <span>选择证书图片</span>
+            </div>
+          </a-button>
+          <div v-if="batchImageProgress.visible" style="margin-top: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <a-progress :percent="batchImageProgress.percent" :stroke-color="{ from: '#108ee9', to: '#87d068' }" style="flex: 1;" />
+              <span style="font-size: 12px; color: #666; white-space: nowrap;">{{ batchImageProgress.text }}</span>
+            </div>
+          </div>
+          <div v-if="uploadedImageFiles.length > 0" style="margin-top: 8px;">
+            <div style="font-size: 12px; color: #52c41a; margin-bottom: 4px;">
+              ✓ 已上传 {{ uploadedImageFiles.length }} 张图片
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <a-tag v-for="(f, idx) in uploadedImageFiles" :key="idx" :color="f.matched ? 'success' : 'warning'">
+                {{ f.name }}
+              </a-tag>
+            </div>
+          </div>
           <div style="font-size: 12px; color: #666; margin-top: 8px;">
             提示：请将图片文件命名为对应的证件号码，如：110101199001011234.jpg
           </div>
@@ -263,6 +317,10 @@ const batchLoading = ref(false);
 const excelData = ref([]);
 const activeKey = ref('single');
 const batchProgress = ref({ visible: false, percent: 0, text: '' });
+const batchImageInput = ref(null);
+const batchImageUploading = ref(false);
+const batchImageProgress = ref({ visible: false, percent: 0, text: '' });
+const uploadedImageFiles = ref([]);
 
 // 表单数据
 const formState = reactive({
@@ -275,6 +333,7 @@ const formState = reactive({
   award_level: '',
     description: '',
     certificate_image: '',
+    certificate_number: '',
     members: []
   });
 
@@ -282,7 +341,8 @@ const formState = reactive({
 const newMember = reactive({
   name: '',
   id_number: '',
-  certificate_image: ''
+  certificate_image: '',
+  certificate_number: ''
 });
 
 // 表单验证规则
@@ -332,8 +392,101 @@ const rules = {
   award_level: [{ required: true, message: '请选择奖项等级', trigger: 'change' }]
 };
 
-// 批量图片上传文件列表
-const batchImageFiles = ref([]);
+// 批量图片上传 — 串行处理，避免并发上传导致浏览器内存爆炸
+const handleBatchImagesSelected = async (event) => {
+  const files = Array.from(event.target.files);
+  if (files.length === 0) return;
+
+  batchImageUploading.value = true;
+  batchImageProgress.value = { visible: true, percent: 0, text: `0/${files.length}` };
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    batchImageProgress.value.text = `${i + 1}/${files.length}`;
+    batchImageProgress.value.percent = Math.round(((i + 1) / files.length) * 100);
+
+    try {
+      if (!file.type.startsWith('image/')) {
+        message.error(`请选择图片文件（${file.name} 不是图片格式）`);
+        failCount++;
+        uploadedImageFiles.value.push({ name: file.name, matched: false });
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        message.error(`图片大小不能超过10MB（${file.name} 过大）`);
+        failCount++;
+        uploadedImageFiles.value.push({ name: file.name, matched: false });
+        continue;
+      }
+
+      // 上传到服务器获取静态文件路径
+      const response = await awardAPI.uploadCertificate(file, 'batch');
+      const filePath = response.data.file_path;
+
+      const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
+      let matched = false;
+
+      for (const record of excelData.value) {
+        if (record.award_type === 'person') {
+          if (normalizeId(record.id_number) === normalizeId(nameWithoutExt)) {
+            record.certificate_image = filePath;
+            record.certificate_filename = file.name;
+            matched = true;
+            break;
+          }
+        } else if (record.award_type === 'group') {
+          if (nameWithoutExt === record.group_name) {
+            record.certificate_image = filePath;
+            record.certificate_filename = file.name;
+            matched = true;
+            break;
+          } else if (record.members) {
+            for (const member of record.members) {
+              if (normalizeId(member.id_number) === normalizeId(nameWithoutExt)) {
+                member.certificate_image = filePath;
+                member.certificate_filename = file.name;
+                matched = true;
+                break;
+              }
+            }
+            if (matched) break;
+          }
+        }
+      }
+
+      uploadedImageFiles.value.push({ name: file.name, matched });
+
+      if (matched) {
+        successCount++;
+        message.success(`${file.name} 匹配成功`);
+      } else {
+        failCount++;
+        message.warning(`未找到匹配记录：${file.name}`);
+      }
+    } catch (error) {
+      console.error('图片处理失败:', error);
+      failCount++;
+      message.error(`${file.name} 上传失败：${error.message || '未知错误'}`);
+      uploadedImageFiles.value.push({ name: file.name, matched: false });
+    }
+  }
+
+  // 批量更新一次，避免每张图都触发全量重渲染
+  excelData.value = [...excelData.value];
+
+  batchImageUploading.value = false;
+  batchImageProgress.value.visible = false;
+
+  if (successCount > 0) {
+    message.info(`上传完成：${successCount} 张匹配成功，${failCount} 张失败`);
+  }
+
+  // 清除 input 的值，允许重复选择相同文件
+  event.target.value = '';
+};
 
 // 个人获奖证书上传处理
 const handlePersonCertificateUpload = async (file) => {
@@ -425,10 +578,13 @@ const onSubmit = async () => {
         ...m,
         id_number: String(m.id_number)
       }));
+      submitData.certificate_image = formState.certificate_image || undefined;
+      submitData.certificate_number = formState.certificate_number || undefined;
     } else {
       submitData.person_name = formState.person_name;
       submitData.id_number = String(formState.id_number);
       submitData.certificate_image = formState.certificate_image || undefined;
+      submitData.certificate_number = formState.certificate_number || undefined;
     }
     console.log('[单条录入] 提交数据:', JSON.parse(JSON.stringify(submitData)));
     let response;
@@ -463,13 +619,15 @@ const addMember = () => {
     formState.members.push({
       name: newMember.name,
       id_number: String(newMember.id_number),
-      certificate_image: newMember.certificate_image || null
+      certificate_image: newMember.certificate_image || null,
+      certificate_number: newMember.certificate_number || ''
     });
-    
+
     // 清空输入框
     newMember.name = '';
     newMember.id_number = '';
     newMember.certificate_image = '';
+    newMember.certificate_number = '';
     
     message.success('成员添加成功');
   }
@@ -494,13 +652,15 @@ const onReset = () => {
     award_level: '',
     description: '',
     certificate_image: '',
+    certificate_number: '',
     members: []
   });
-  
+
   // 重置新成员输入
   newMember.name = '';
   newMember.id_number = '';
   newMember.certificate_image = '';
+  newMember.certificate_number = '';
 };
 
 // 预览表格列定义
@@ -510,6 +670,7 @@ const previewColumns = ref([
   { title: '团名', dataIndex: 'group_name', key: 'group_name', width: 120 },
   { title: '姓名', dataIndex: 'person_name', key: 'person_name', width: 100 },
   { title: '证件号码', dataIndex: 'id_number', key: 'id_number', width: 150 },
+  { title: '证书编号', dataIndex: 'certificate_number', key: 'certificate_number', width: 130 },
   { title: '团体成员', dataIndex: 'members_display', key: 'members_display', width: 200, ellipsis: true },
   { title: '组别', dataIndex: 'category', key: 'category', width: 120 },
   { title: '奖项等级', dataIndex: 'award_level', key: 'award_level', width: 100 },
@@ -549,6 +710,8 @@ const handleExcelUpload = (file) => {
         const group_name = row['团名'] || row['团体名称'] || row['group_name'] || '';
         const person_name = row['姓名'] || row['个人姓名'] || row['person_name'] || '';
         const id_number = String(row['证件号码'] || row['id_number'] || '').trim(); // 确保是字符串并去除空格
+        const certificate_number = String(row['证书编号'] || row['获奖编号'] || row['certificate_number'] || '').trim();
+        const group_certificate_number = String(row['团队证书编号'] || row['团体证书编号'] || row['group_certificate_number'] || '').trim();
         const category = row['组别'] || row['category'] || '';
         const award_level = row['奖项等级'] || row['等级'] || row['award_level'] || '';
         const description = row['描述'] || row['description'] || '';
@@ -563,6 +726,8 @@ const handleExcelUpload = (file) => {
           group_name,
           person_name,
           id_number,
+          certificate_number,
+          group_certificate_number,
           category,
           award_level,
           description,
@@ -572,20 +737,29 @@ const handleExcelUpload = (file) => {
 
       if (rawData.length === 0) {
         console.log('Excel解析结果:', rawData);
-        message.error('Excel文件中没有找到有效数据，请检查文件格式');
+        console.log('Excel原始jsonData:', jsonData);
+        console.log('检测到的表头:', Object.keys(jsonData[0] || {}));
+        message.error('Excel文件中没有找到有效数据，请检查文件格式。要求：类型、年份、组别、奖项等级不能为空。');
         return;
       }
 
       // 处理团体成员合并逻辑
       const processedData = processGroupMembers(rawData);
-      
+
       // 打印处理后的数据，用于调试
       console.log('Excel处理后的数据:', processedData);
-      
+
       excelData.value = processedData;
 
       const personCount = processedData.filter(p => p.award_type === 'person').length;
       const groupCount = processedData.filter(p => p.award_type === 'group').length;
+
+      if (personCount === 0 && groupCount === 0) {
+        console.log('rawData (过滤后):', rawData);
+        message.warning('解析到数据但无法分类为个人/团体记录。请检查：类型列值是否为"个人"/"团体"（或person/group），姓名和证件号码是否填写。');
+        return;
+      }
+
       message.success(`成功解析 ${personCount} 条个人记录和 ${groupCount} 个团体记录。`);
 
     } catch (error) {
@@ -620,13 +794,16 @@ const processGroupMembers = (rawData) => {
           category: item.category,
           award_level: item.award_level,
           description: item.description,
+          certificate_number: item.group_certificate_number || '',
+          certificate_image: '',
           members: []
         });
       }
       groupMap.get(groupKey).members.push({
         name: item.person_name,
         id_number: String(item.id_number).trim(),
-        certificate_image: item.certificate_image || ''
+        certificate_image: item.certificate_image || '',
+        certificate_number: item.certificate_number || ''
       });
     } else if (item.award_type === 'person' && item.person_name && item.id_number) {
       personAwards.push(itemWithStringId);
@@ -660,6 +837,7 @@ const removeExcelRow = (index) => {
 // 清空Excel数据
 const clearExcelData = () => {
   excelData.value = [];
+  uploadedImageFiles.value = [];
   message.success('已清空所有数据');
 };
 
@@ -728,11 +906,13 @@ const batchSubmit = async () => {
 
       if (item.award_type === 'group') {
         data.group_name = item.group_name;
+        data.certificate_number = item.certificate_number || undefined;
         if (item.members && item.members.length > 0) {
           data.members = item.members.map(m => ({
             name: m.name,
             id_number: String(m.id_number),
-            certificate_image: m.certificate_image || undefined
+            certificate_image: m.certificate_image || undefined,
+            certificate_number: m.certificate_number || undefined
           }));
         } else {
           data.members = [];
@@ -745,6 +925,7 @@ const batchSubmit = async () => {
         data.person_name = item.person_name;
         data.id_number = String(item.id_number);
         data.certificate_image = item.certificate_image || undefined;
+        data.certificate_number = item.certificate_number || undefined;
         allPersonAwards.push(data);
       }
     }
@@ -815,7 +996,7 @@ const batchSubmit = async () => {
 
     message.success(`批量上传成功！共上传${totalUploaded}条记录（${results.join('，')}）`);
     clearExcelData();
-    batchImageFiles.value = [];
+    uploadedImageFiles.value = [];
   } catch (error) {
     console.error('[批量上传] 错误:', error);
     handleApiError(error, '批量提交');
@@ -927,6 +1108,8 @@ const downloadTemplate = () => {
       '团名': '',
       '姓名': '张三',
       '证件号码': '110101199001011234',
+      '证书编号': '2026000101',
+      '团队证书编号': '',
       '组别': '教师组',
       '奖项等级': '一等奖',
       '描述': '优秀教学成果',
@@ -938,6 +1121,8 @@ const downloadTemplate = () => {
       '团名': '创新团队',
       '姓名': '李四',
       '证件号码': '110101199002022345',
+      '证书编号': '2026000201',
+      '团队证书编号': '20260002',
       '组别': '科研组',
       '奖项等级': '特等奖',
       '描述': '科技创新项目',
@@ -949,6 +1134,8 @@ const downloadTemplate = () => {
       '团名': '创新团队',
       '姓名': '王五',
       '证件号码': '110101199003033456',
+      '证书编号': '2026000202',
+      '团队证书编号': '20260002',
       '组别': '科研组',
       '奖项等级': '特等奖',
       '描述': '科技创新项目',
@@ -964,69 +1151,6 @@ const downloadTemplate = () => {
   // 下载文件
   XLSX.writeFile(wb, '获奖记录上传模板.xlsx');
   message.success('模板下载成功');
-};
-
-// 批量图片上传处理 — 上传到服务器获取静态路径，再匹配记录
-const handleBatchImageUpload = async (file) => {
-  try {
-    if (!file.type.startsWith('image/')) {
-      message.error(`请选择图片文件（${file.name} 不是图片格式）`);
-      return false;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      message.error(`图片大小不能超过10MB（${file.name} 过大）`);
-      return false;
-    }
-
-    // 上传到服务器获取静态文件路径
-    const response = await awardAPI.uploadCertificate(file, 'batch');
-    const filePath = response.data.file_path;
-
-    const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
-    let matched = false;
-
-    for (const record of excelData.value) {
-      if (record.award_type === 'person') {
-        if (normalizeId(record.id_number) === normalizeId(nameWithoutExt)) {
-          record.certificate_image = filePath;
-          record.certificate_filename = file.name;
-          matched = true;
-          break;
-        }
-      } else if (record.award_type === 'group') {
-        if (nameWithoutExt === record.group_name) {
-          record.certificate_image = filePath;
-          record.certificate_filename = file.name;
-          matched = true;
-          break;
-        } else if (record.members) {
-          for (const member of record.members) {
-            if (normalizeId(member.id_number) === normalizeId(nameWithoutExt)) {
-              member.certificate_image = filePath;
-              member.certificate_filename = file.name;
-              matched = true;
-              break;
-            }
-          }
-          if (matched) break;
-        }
-      }
-    }
-
-    excelData.value = [...excelData.value];
-
-    if (matched) {
-      message.success(`成功匹配证书图片：${file.name}`);
-    } else {
-      message.warning(`未找到匹配的记录：${file.name}，请检查证件号或团体名称是否一致`);
-    }
-
-    return false;
-  } catch (error) {
-    console.error('图片处理失败:', error);
-    message.error(`图片处理失败：${error.message || '未知错误'}`);
-    return false;
-  }
 };
 
 // 图片上传统一使用 awardAPI.uploadCertificate(file, idNumber)

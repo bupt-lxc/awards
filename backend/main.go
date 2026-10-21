@@ -5,8 +5,10 @@ import (
 	"awards-management/database"
 	"awards-management/middleware"
 	"awards-management/routes"
+	"awards-management/storage"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -30,17 +32,31 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// 初始化对象存储（腾讯云 COS，失败时自动回退本地）
+	cosCfg := storage.COSConfig{
+		SecretID:  config.AppConfig.Storage.SecretID,
+		SecretKey: config.AppConfig.Storage.SecretKey,
+		Region:    config.AppConfig.Storage.Region,
+		Bucket:    config.AppConfig.Storage.Bucket,
+		PublicURL: config.AppConfig.Storage.PublicURL,
+	}
+	store, err := storage.NewCOSService(cosCfg)
+	if err != nil {
+		log.Printf("Warning: 对象存储初始化失败: %v", err)
+	}
+	storage.SetGlobal(store)
+
 	// 设置Gin模式
 	gin.SetMode(config.AppConfig.Server.Mode)
 
 	// 创建Gin引擎
 	r := gin.Default()
 
-	// 设置请求体大小限制为200MB，以支持批量上传
-	r.MaxMultipartMemory = 200 << 20 // 200MB
+	// 设置请求体大小限制（2C2G 优化：从 200MB/100MB 降到 10MB，证书图片足够）
+	r.MaxMultipartMemory = 10 << 20 // 单文件目标上限 10MB
 	// 设置JSON请求体大小限制
 	r.Use(func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 100<<20) // 100MB
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 12<<20) // 为 multipart 边界预留空间
 		c.Next()
 	})
 
@@ -57,8 +73,30 @@ func main() {
 	r.Use(middleware.MonitorMiddleware())
 	r.Use(middleware.UserActivityMiddleware())
 
-	// 静态资源服务：将uploads/certificates映射为/static/certificates
-	r.Static("/static/certificates", "uploads/certificates")
+	// 证书图片代理：本地有则直接返回，否则从 COS 拉取
+	r.GET("/static/certificates/:filename", func(c *gin.Context) {
+		filename := c.Param("filename")
+		filePath := "/static/certificates/" + filename
+
+		store := storage.Get()
+		if store == nil {
+			c.Status(http.StatusServiceUnavailable)
+			return
+		}
+
+		reader, contentType, err := store.Get(filePath)
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		defer reader.Close()
+
+		if contentType != "" {
+			c.Header("Content-Type", contentType)
+		}
+		c.Header("Cache-Control", "public, max-age=3600")
+		io.Copy(c.Writer, reader)
+	})
 
 	// 设置路由
 	routes.SetupRoutes(r)
@@ -89,8 +127,8 @@ func main() {
 
 	log.Println("正在关闭服务器...")
 
-	// 30 秒超时优雅关闭 HTTP 服务
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 15 秒超时优雅关闭（2C2G 优化：低配机器加快关闭速度）
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("HTTP server shutdown error: %v", err)

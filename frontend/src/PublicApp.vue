@@ -3,10 +3,10 @@
     <!-- 顶部导航栏 -->
     <header class="top-header">
       <div class="header-container new-header-layout">
-        <img src="/25551751939512_.pic_hd.jpg" alt="logo" class="logo-img-large" />
+        <img src="/logo.jpg" alt="logo" class="logo-img-large" />
         <div class="title-section">
-          <h1 class="logo-title">中国国际青少年合唱节</h1>
-          <p class="logo-subtitle">China International Young Singers' Choral Festival</p>
+          <h1 class="logo-title">香港國際合唱節</h1>
+          <p class="logo-subtitle">HONG KONG INTERNATIONAL CHORAL FESTIVAL</p>
         </div>
         <div class="nav-section">
         </div>
@@ -83,8 +83,8 @@
     <footer class="app-footer">
       <div class="footer-container">
         <div class="footer-bottom">
-          <p>中国国际青少年合唱节组委会</p>
-          <p>地址：深圳市南山区后海滨路保利剧院  电话：0755-86371696</p>
+          <p>香港國際合唱節組委會  地址：深圳市南山区后海滨路保利剧院  电话：0755-86371696</p>
+          <p class="icp-text"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">备案/许可证编号为：苏ICP备2026042125号</a></p>
         </div>
       </div>
     </footer>
@@ -115,10 +115,10 @@ const goBack = () => {
 
 
 const carouselImages = [
-  '/轮播图首页.jpg',
-  '/轮播图2.jpg',
-  '/轮播图3.jpg',
-  '/轮播图4.jpg',
+  '/logo.jpg',
+  '/logo.jpg',
+  '/logo.jpg',
+  '/logo.jpg',
 ]
 
 const carouselTitles = [
@@ -504,8 +504,18 @@ onUnmounted(() => {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  display: inline-block;
+  display: block;
   font-weight: 500;
+}
+
+.footer-bottom .icp-text a {
+  font-size: 1rem;
+  font-weight: 500;
+  background: linear-gradient(90deg, #C14B4B, #E6904F, #F9BE50);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-decoration: none;
 }
 
 /* 响应式设计 */

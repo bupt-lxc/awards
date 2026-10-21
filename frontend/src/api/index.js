@@ -113,7 +113,11 @@ export const authAPI = {
 };
 
 export const awardAPI = {
-  // 查询个人获奖记录（公开接口）
+	// 名称模糊联想（仅返回名称，不返回证件号或获奖详情）
+	suggestNames: (type, keyword, limit = 10) => api.get('/awards/suggestions', {
+		params: { type, q: keyword, limit }
+	}),
+	// 查询个人获奖记录（公开接口）
   queryPersonAwards: (data) => api.post('/awards/query/person', data),
   // 查询团体获奖记录（公开接口）
   queryGroupAwards: (data) => api.post('/awards/query/group', data),
@@ -186,5 +190,6 @@ export const monitorAPI = {
 // 导出独立的查询函数，方便组件直接使用
 export const queryPersonAwards = awardAPI.queryPersonAwards;
 export const queryGroupAwards = awardAPI.queryGroupAwards;
+export const suggestAwardNames = awardAPI.suggestNames;
 
 export default api;

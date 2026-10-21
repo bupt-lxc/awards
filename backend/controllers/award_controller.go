@@ -4,29 +4,63 @@ import (
 	"awards-management/auth"
 	"awards-management/dto"
 	"awards-management/services"
+	"awards-management/storage"
 	"awards-management/utils"
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 type AwardController struct {
-	personAwardService *services.PersonAwardService
-	groupAwardService  *services.GroupAwardService
+	personAwardService    *services.PersonAwardService
+	groupAwardService     *services.GroupAwardService
+	nameSuggestionService *services.NameSuggestionService
 }
 
 func NewAwardController() *AwardController {
 	return &AwardController{
-		personAwardService: services.NewPersonAwardService(),
-		groupAwardService:  services.NewGroupAwardService(),
+		personAwardService:    services.NewPersonAwardService(),
+		groupAwardService:     services.NewGroupAwardService(),
+		nameSuggestionService: services.NewNameSuggestionService(),
 	}
+}
+
+func (ac *AwardController) SuggestNames(c *gin.Context) {
+	nameType := strings.TrimSpace(c.Query("type"))
+	keyword := strings.TrimSpace(c.Query("q"))
+	if nameType != "group" {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Error: "仅支持团队名称建议"})
+		return
+	}
+	if keyword == "" {
+		c.JSON(http.StatusOK, dto.SuccessResponse{
+			Message: "名称建议",
+			Data:    map[string]interface{}{"options": []string{}},
+		})
+		return
+	}
+
+	limit := 10
+	if value, err := strconv.Atoi(c.DefaultQuery("limit", "10")); err == nil && value > 0 && value <= 10 {
+		limit = value
+	}
+
+	names, err := ac.nameSuggestionService.SuggestNames(nameType, keyword, limit)
+	if err != nil {
+		serverError(c, "查询名称建议失败", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.SuccessResponse{
+		Message: "名称建议",
+		Data:    map[string]interface{}{"options": names},
+	})
 }
 
 func (ac *AwardController) QueryPersonAwards(c *gin.Context) {
@@ -379,24 +413,20 @@ func (ac *AwardController) UploadCertificateImage(c *gin.Context) {
 		return
 	}
 
-	// 保存到 uploads/certificates/
-	certificatesDir := "uploads/certificates"
-	if err := os.MkdirAll(certificatesDir, 0750); err != nil {
-		serverError(c, "创建目录失败", err)
-		return
+	// 使用对象存储服务保存（MinIO / 本地回退）
+	origFilename := file.Filename
+	if origFilename == "" {
+		origFilename = "certificate"
 	}
-
-	filename := uuid.New().String() + ".png"
-	filePath := filepath.Join(certificatesDir, filename)
-	if err := os.WriteFile(filePath, pngBytes, 0640); err != nil {
+	publicPath, err := storage.Get().Upload(origFilename, bytes.NewReader(pngBytes), int64(len(pngBytes)), "image/png")
+	if err != nil {
 		serverError(c, "保存文件失败", err)
 		return
 	}
 
-	staticPath := "/static/certificates/" + filename
 	c.JSON(http.StatusOK, dto.SuccessResponse{
 		Message: "证书图片上传成功",
-		Data:    map[string]interface{}{"file_path": staticPath},
+		Data:    map[string]interface{}{"file_path": publicPath},
 	})
 }
 
@@ -414,12 +444,7 @@ func (ac *AwardController) BatchUploadCertificateImages(c *gin.Context) {
 		return
 	}
 
-	certificatesDir := "uploads/certificates"
-	if err := os.MkdirAll(certificatesDir, 0750); err != nil {
-		serverError(c, "创建目录失败", err)
-		return
-	}
-
+	store := storage.Get()
 	results := make([]map[string]interface{}, 0)
 	for _, file := range files {
 		itemResult := map[string]interface{}{"filename": file.Filename, "success": false}
@@ -467,16 +492,20 @@ func (ac *AwardController) BatchUploadCertificateImages(c *gin.Context) {
 		base := filepath.Base(file.Filename)
 		idNumber := strings.TrimSuffix(base, filepath.Ext(base))
 
-		filename := uuid.New().String() + ".png"
-		filePath := filepath.Join(certificatesDir, filename)
-		if err := os.WriteFile(filePath, pngBytes, 0640); err != nil {
+		// 使用对象存储服务保存
+		origFilename := file.Filename
+		if origFilename == "" {
+			origFilename = "certificate.png"
+		}
+		publicPath, err := store.Upload(origFilename, bytes.NewReader(pngBytes), int64(len(pngBytes)), "image/png")
+		if err != nil {
 			itemResult["error"] = "保存文件失败: " + err.Error()
 			results = append(results, itemResult)
 			continue
 		}
 
 		itemResult["success"] = true
-		itemResult["file_path"] = "/static/certificates/" + filename
+		itemResult["file_path"] = publicPath
 		itemResult["id_number"] = idNumber
 		results = append(results, itemResult)
 	}
