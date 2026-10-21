@@ -328,6 +328,8 @@
       title="获奖记录详情"
       :footer="null"
       width="600px"
+      @cancel="handleDetailModalClose"
+      :after-close="handleDetailModalClose"
     >
       <div v-if="selectedRecord">
         <a-descriptions :column="2" bordered>
@@ -341,16 +343,36 @@
           <a-descriptions-item label="团体名称" v-if="selectedRecord.award_type === 'group'">
             {{ selectedRecord.group_name || '-' }}
           </a-descriptions-item>
+          <a-descriptions-item label="证书编号" v-if="selectedRecord.award_type === 'group'">
+            {{ selectedRecord.certificate_number || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="团队证书" :span="2" v-if="selectedRecord.award_type === 'group'">
+            <div style="text-align: center;">
+              <template v-if="selectedRecord.certificate_image && selectedRecord.certificate_image !== 'has_certificate'">
+                <img
+                  :src="processImageUrl(selectedRecord.certificate_image)"
+                  alt="团队证书"
+                  style="max-width: 400px; max-height: 300px; border: 1px solid #d9d9d9; border-radius: 6px; cursor: pointer;"
+                  @click="previewImage(selectedRecord.certificate_image, selectedRecord.group_name + ' - 团队证书')"
+                  @error="handleImageError($event, '团队证书')"
+                />
+              </template>
+              <div v-else style="color: #999; font-style: italic;">暂无团队证书图片</div>
+            </div>
+          </a-descriptions-item>
           <a-descriptions-item label="个人姓名" v-if="selectedRecord.award_type === 'person'">
             {{ selectedRecord.person_name || '-' }}
           </a-descriptions-item>
           <a-descriptions-item label="证件号码" v-if="selectedRecord.award_type === 'person'">
             {{ selectedRecord.id_number || '-' }}
           </a-descriptions-item>
+          <a-descriptions-item label="证书编号" v-if="selectedRecord.award_type === 'person'">
+            {{ selectedRecord.certificate_number || '-' }}
+          </a-descriptions-item>
           <a-descriptions-item label="团体成员" v-if="selectedRecord.award_type === 'group' && selectedRecord.members" :span="2">
             <div v-if="selectedRecord.members && selectedRecord.members.length > 0">
               <a-tag v-for="(member, index) in selectedRecord.members" :key="index" style="margin: 2px;">
-                {{ member.name }} ({{ member.id_number }})
+                {{ member.name }} ({{ member.id_number }}){{ member.certificate_number ? ' · ' + member.certificate_number : '' }}
               </a-tag>
             </div>
             <span v-else>无成员信息</span>
@@ -450,6 +472,31 @@
         <a-form-item label="团体名称" name="group_name" v-if="editForm.award_type === 'group'">
           <a-input v-model:value="editForm.group_name" placeholder="请输入团体名称" />
         </a-form-item>
+
+        <a-form-item label="团队证书编号" v-if="editForm.award_type === 'group'">
+          <a-input v-model:value="editForm.certificate_number" placeholder="请输入团队获奖证书编号（可选）" />
+        </a-form-item>
+
+        <!-- 团队证书图片上传 -->
+        <a-form-item label="团队证书" name="certificate_image" v-if="editForm.award_type === 'group'">
+          <a-upload
+            v-model:file-list="personCertificateFileList"
+            name="certificate"
+            list-type="picture-card"
+            class="certificate-uploader"
+            :show-upload-list="false"
+            :before-upload="beforeUpload"
+            @change="handlePersonCertificateChange"
+          >
+            <div v-if="editForm.certificate_image">
+              <img :src="editForm.certificate_image" alt="团队证书" style="width: 100%; height: 100%; object-fit: cover;" />
+            </div>
+            <div v-else>
+              <plus-outlined />
+              <div style="margin-top: 8px">上传团队证书</div>
+            </div>
+          </a-upload>
+        </a-form-item>
         
         <a-form-item label="个人姓名" name="person_name" v-if="editForm.award_type === 'person'">
           <a-input v-model:value="editForm.person_name" placeholder="请输入个人姓名" />
@@ -458,7 +505,11 @@
         <a-form-item label="证件号码" name="id_number" v-if="editForm.award_type === 'person'">
           <a-input v-model:value="editForm.id_number" placeholder="请输入证件号码" />
         </a-form-item>
-        
+
+        <a-form-item label="证书编号" name="certificate_number" v-if="editForm.award_type === 'person'">
+          <a-input v-model:value="editForm.certificate_number" placeholder="请输入证书编号" />
+        </a-form-item>
+
         <!-- 个人证书图片上传 -->
         <a-form-item label="获奖证书" name="certificate_image" v-if="editForm.award_type === 'person'">
           <a-upload
@@ -488,10 +539,15 @@
               placeholder="成员姓名" 
               style="width: 120px; margin-right: 8px;"
             />
-            <a-input 
-              v-model:value="editNewMember.id_number" 
-              placeholder="证件号码" 
+            <a-input
+              v-model:value="editNewMember.id_number"
+              placeholder="证件号码"
               style="width: 150px; margin-right: 8px;"
+            />
+            <a-input
+              v-model:value="editNewMember.certificate_number"
+              placeholder="证书编号"
+              style="width: 130px; margin-right: 8px;"
             />
             <a-button type="primary" size="small" @click="addEditMember">添加成员</a-button>
           </div>
@@ -504,7 +560,7 @@
               <div class="member-edit-info">
                 <div class="member-edit-text">
                   <span class="member-name">{{ member.name }}</span>
-                  <span class="member-id">({{ member.id_number }})</span>
+                  <span class="member-id">({{ member.id_number }}){{ member.certificate_number ? ' · ' + member.certificate_number : '' }}</span>
                 </div>
                 <a-button 
                   type="text" 
@@ -542,7 +598,7 @@
           </div>
           <div v-else style="color: #999; font-size: 12px;">暂无成员</div>
         </a-form-item>
-        
+
         <a-form-item label="组别" name="category">
           <a-input v-model:value="editForm.category" placeholder="请输入组别" />
         </a-form-item>
@@ -586,7 +642,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, h } from 'vue';
+import { ref, computed, onMounted, onUnmounted, h } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { awardAPI } from '../api/index.js';
 import { ExclamationCircleOutlined, PlusOutlined, DeleteOutlined, SearchOutlined, UserOutlined, TeamOutlined } from '@ant-design/icons-vue';
@@ -608,7 +664,7 @@ const editModalVisible = ref(false);
 const editForm = ref(null);
 const editLoading = ref(false);
 const editFormRef = ref(null);
-const editNewMember = ref({ name: '', id_number: '' });
+const editNewMember = ref({ name: '', id_number: '', certificate_number: '' });
 const personCertificateFileList = ref([]);
 const memberQrModalVisible = ref(false);
 const memberQrList = ref([]);
@@ -909,7 +965,6 @@ const loadAllRecords = async () => {
     if (response.person_awards && response.person_awards.length > 0) {
       response.person_awards.forEach(award => {
         if (!award.id) {
-          console.warn('警告：发现无效的个人记录', award);
           return;
         }
         allAwards.push({
@@ -925,7 +980,6 @@ const loadAllRecords = async () => {
     if (response.group_awards && response.group_awards.length > 0) {
       response.group_awards.forEach(award => {
         if (!award.id) {
-          console.warn('警告：发现无效的团体记录', award);
           return;
         }
         
@@ -951,15 +1005,12 @@ const loadAllRecords = async () => {
     
     // 数据完整性检查
     const validAwards = allAwards.filter(award => {
-      if (!award.id || !award.year) {
-        console.warn('警告：发现无效的记录', award);
-        return false;
-      }
+      if (!award.id || !award.year) { return false; }
       return true;
     });
     
     allRecords.value = validAwards;
-    console.log(`加载记录完成：总计 ${validAwards.length} 条有效记录（轻量级模式）`);
+    console.log(`加载完成：${validAwards.length} 条记录`);
     message.success(`成功加载 ${validAwards.length} 条记录（个人：${response.total_person || 0}，团体：${response.total_group || 0}）`);
     
     // 更新性能信息
@@ -1013,6 +1064,24 @@ const viewRecord = async (record) => {
     message.error('查看记录详情失败');
   } finally {
     certificateLoading.value = false;
+  }
+};
+
+// 关闭详情弹窗时释放证书图片内存
+const handleDetailModalClose = () => {
+  if (selectedRecord.value) {
+    // 将已加载的证书图片重置为哨兵值，释放图片URL引用
+    if (selectedRecord.value.certificate_image && selectedRecord.value.certificate_image !== 'has_certificate') {
+      selectedRecord.value.certificate_image = 'has_certificate';
+    }
+    if (selectedRecord.value.members) {
+      selectedRecord.value.members.forEach(m => {
+        if (m.certificate_image && m.certificate_image !== 'has_certificate') {
+          m.certificate_image = 'has_certificate';
+        }
+      });
+    }
+    selectedRecord.value = null;
   }
 };
 
@@ -1072,11 +1141,12 @@ const loadGroupMemberCertificates = async (record) => {
     
     // 获取团体成员的证书信息
     const response = await awardAPI.getGroupMembersWithCertificates(record.id);
-    
-    // 更新成员的证书图片
-    if (response && Array.isArray(response)) {
-      response.forEach(memberData => {
-        const member = record.members.find(m => 
+
+    // 更新成员的证书图片（response 是 { award_id, members, total } 对象）
+    const membersData = response?.members || [];
+    if (Array.isArray(membersData)) {
+      membersData.forEach(memberData => {
+        const member = record.members.find(m =>
           m.name === memberData.member_name && m.id_number === memberData.member_id_number
         );
         if (member && memberData.certificate_image) {
@@ -1091,7 +1161,32 @@ const loadGroupMemberCertificates = async (record) => {
 };
 
 // 编辑记录
-const editRecord = (record) => {
+const editRecord = async (record) => {
+  let members = record.members ? record.members.map(member => ({ ...member })) : [];
+
+  // 轻量列表仅带 has_certificate 哨兵。编辑团队前必须取回真实成员证书路径，
+  // 否则保存成员列表时会误清空已有证书。
+  if (record.award_type === 'group' && members.some(member => member.certificate_image === 'has_certificate' || member.has_certificate)) {
+    try {
+      const response = await awardAPI.getGroupMembersWithCertificates(record.id);
+      const fullMembers = response?.members || [];
+      members = members.map(member => {
+        const full = fullMembers.find(item =>
+          item.member_name === member.name && item.member_id_number === member.id_number
+        );
+        return {
+          ...member,
+          certificate_image: full?.certificate_image || '',
+          certificate_number: full?.certificate_number || member.certificate_number || ''
+        };
+      });
+    } catch (error) {
+      console.error('加载团队成员完整信息失败:', error);
+      message.error('无法加载成员证书，已取消编辑以保护现有数据');
+      return;
+    }
+  }
+
   editForm.value = {
     id: record.id,
     award_type: record.award_type,
@@ -1102,20 +1197,21 @@ const editRecord = (record) => {
     category: record.category,
     award_level: record.award_level,
     description: record.description || '',
-    certificate_image: record.certificate_image || '', // 添加这一行
-    members: record.members ? [...record.members] : []
+    certificate_image: (record.certificate_image && record.certificate_image !== 'has_certificate') ? record.certificate_image : '',
+    certificate_number: record.certificate_number || '',
+    members
   };
   
   // 重置新成员输入
-  editNewMember.value = { name: '', id_number: '' };
+  editNewMember.value = { name: '', id_number: '', certificate_number: '' };
   
   editModalVisible.value = true;
 };
 
-// 验证图片路径（现为静态文件路径如 /static/certificates/uuid.png）
+// 验证图片路径：允许本站代理路径或对象存储返回的 HTTPS URL。
 const validateImageData = (imageData) => {
   if (!imageData) return true;  // 允许为空
-  return imageData.startsWith('/static/certificates/');
+  return imageData.startsWith('/static/certificates/') || /^https:\/\/[a-z0-9.-]+(?::\d+)?\//i.test(imageData);
 };
 
 // 保存编辑
@@ -1145,6 +1241,11 @@ const saveEdit = async () => {
       }
       
       updateData.group_name = editForm.value.group_name;
+
+      if (editForm.value.certificate_image && !validateImageData(editForm.value.certificate_image)) {
+        message.error('团队证书图片格式无效');
+        return;
+      }
       
       // 验证并处理成员数据
       if (!editForm.value.members || editForm.value.members.length === 0) {
@@ -1169,11 +1270,15 @@ const saveEdit = async () => {
         updateData.members.push({
           name: member.name,
           id_number: String(member.id_number),
-          certificate_image: member.certificate_image || ''
+          certificate_image: member.certificate_image || '',
+          certificate_number: member.certificate_number || ''
         });
       }
       
       // 调用更新API
+      updateData.certificate_image = editForm.value.certificate_image || '';
+      updateData.certificate_number = editForm.value.certificate_number || '';
+
       await awardAPI.updateGroupAward(updateData);
       
     } else {
@@ -1192,6 +1297,7 @@ const saveEdit = async () => {
       updateData.person_name = editForm.value.person_name;
       updateData.id_number = String(editForm.value.id_number);
       updateData.certificate_image = editForm.value.certificate_image || '';
+      updateData.certificate_number = editForm.value.certificate_number || '';
       
       // 调用更新API
       await awardAPI.updatePersonAward(updateData);
@@ -1205,7 +1311,7 @@ const saveEdit = async () => {
     // 关闭编辑模态框
     editModalVisible.value = false;
     editForm.value = null;
-    editNewMember.value = { name: '', id_number: '' };
+    editNewMember.value = { name: '', id_number: '', certificate_number: '' };
     personCertificateFileList.value = [];
     
   } catch (error) {
@@ -1239,11 +1345,12 @@ const addEditMember = () => {
     
     editForm.value.members.push({
       name: editNewMember.value.name,
-      id_number: String(editNewMember.value.id_number)
+      id_number: String(editNewMember.value.id_number),
+      certificate_number: editNewMember.value.certificate_number || ''
     });
     
     // 清空输入框
-    editNewMember.value = { name: '', id_number: '' };
+    editNewMember.value = { name: '', id_number: '', certificate_number: '' };
     
     message.success('成员添加成功');
   } else {
@@ -1261,7 +1368,7 @@ const removeEditMember = (index) => {
 const cancelEdit = () => {
   editModalVisible.value = false;
   editForm.value = null;
-  editNewMember.value = { name: '', id_number: '' };
+  editNewMember.value = { name: '', id_number: '', certificate_number: '' };
   personCertificateFileList.value = [];
   if (editFormRef.value) {
     editFormRef.value.resetFields();
@@ -1275,9 +1382,9 @@ const beforeUpload = (file) => {
     message.error('只能上传 JPG/PNG 格式的图片!');
     return false;
   }
-  const isLt2M = file.size / 1024 / 1024 < 2;
-  if (!isLt2M) {
-    message.error('图片大小不能超过 2MB!');
+  const isLt10M = file.size / 1024 / 1024 < 10;
+  if (!isLt10M) {
+    message.error('图片大小不能超过 10MB!');
     return false;
   }
   return false; // 阻止自动上传，手动处理
@@ -1762,8 +1869,7 @@ const clearMemory = () => {
     // 更新性能信息
     updatePerformanceInfo();
     
-    message.success('内存清理完成！已释放证书图片占用的内存');
-    console.log('内存清理完成');
+    message.success('内存清理完成');
   } catch (error) {
     console.error('内存清理失败:', error);
     message.error('内存清理失败');
@@ -1811,8 +1917,7 @@ const advancedClearMemory = async () => {
     document.body.offsetHeight; // 触发重排
     document.body.style.display = '';
     
-    message.success('高级内存清理完成！已清理所有缓存和临时数据');
-    console.log('高级内存清理完成');
+    message.success('内存清理完成');
   } catch (error) {
     console.error('高级内存清理失败:', error);
     message.error('高级内存清理失败');
@@ -1820,14 +1925,14 @@ const advancedClearMemory = async () => {
 };
 
 // 自动内存清理（定期清理）
+let autoClearTimer = null;
 const autoClearMemory = () => {
-  // 每5分钟自动清理一次内存
-  setInterval(() => {
+  if (autoClearTimer) clearInterval(autoClearTimer);
+  autoClearTimer = setInterval(() => {
     if (allRecords.value && allRecords.value.length > 0) {
-      console.log('执行自动内存清理...');
       clearMemory();
     }
-  }, 5 * 60 * 1000); // 5分钟
+  }, 10 * 60 * 1000); // 10分钟
 };
 
 // 更新性能信息
@@ -1845,24 +1950,18 @@ const updatePerformanceInfo = () => {
   }
 };
 
-// 智能内存监控
+// 轻量内存监控 — 仅更新性能信息，不弹警告
+let memoryCheckTimer = null;
 const memoryMonitor = () => {
-  // 每30秒检查一次内存使用情况
-  setInterval(() => {
+  const check = () => {
     if (window.performance && window.performance.memory) {
-      const usedMemory = window.performance.memory.usedJSHeapSize / 1024 / 1024; // MB
-      const totalMemory = window.performance.memory.totalJSHeapSize / 1024 / 1024; // MB
-      const memoryUsagePercent = (usedMemory / totalMemory) * 100;
-      
-      // 如果内存使用超过80%，提醒用户清理
-      if (memoryUsagePercent > 80) {
-        message.warning(`内存使用率较高 (${memoryUsagePercent.toFixed(1)}%)，建议清理内存以提升性能`);
-      }
-      
-      // 更新性能信息
-      performanceInfo.value.memoryUsage = Math.round(usedMemory * 1024); // 转换为KB
+      const usedMB = window.performance.memory.usedJSHeapSize / 1024 / 1024;
+      performanceInfo.value.memoryUsage = Math.round(usedMB * 1024);
     }
-  }, 30 * 1000); // 30秒
+  };
+  check();
+  if (memoryCheckTimer) clearInterval(memoryCheckTimer);
+  memoryCheckTimer = setInterval(check, 120000);
 };
 
 // 页面加载时自动加载记录
@@ -1870,13 +1969,14 @@ onMounted(() => {
   checkUserInfo();
   if (userInfo.value) {
     loadAllRecords();
-    // 显示优化提示
-    message.info('系统已优化为轻量级模式，证书图片将按需加载，提升页面性能');
-    // 启动自动内存清理
     autoClearMemory();
-    // 启动智能内存监控
     memoryMonitor();
   }
+});
+
+onUnmounted(() => {
+  if (autoClearTimer) { clearInterval(autoClearTimer); autoClearTimer = null; }
+  if (memoryCheckTimer) { clearInterval(memoryCheckTimer); memoryCheckTimer = null; }
 });
 
 // 导出组件数据和方法

@@ -52,10 +52,10 @@
             </a-col>
             
             <a-col :xs="24" :sm="12" :md="6">
-              <a-form-item label="参赛编码" name="id_number" :rules="[{ required: true, message: '请输入参赛编码' }]">
-                <a-input 
-                  v-model:value="queryForm.id_number" 
-                  placeholder="输入参赛编码"
+              <a-form-item label="参赛编码" name="id_number">
+                <a-input
+                  v-model:value="queryForm.id_number"
+                  placeholder="输入参赛编码（可选）"
                   size="large"
                   allow-clear
                 />
@@ -365,6 +365,8 @@ export default {
 
     // 团队名称搜索处理函数
     const handleTeamSearch = (value) => {
+      // 同步输入值到 queryForm，解决 AutoComplete 不点击下拉选项时 v-model 不更新的问题
+      queryForm.group_name = value
       if (!value) {
         filteredTeamOptions.value = teamOptions.map(team => ({ value: team }))
         return
@@ -398,9 +400,12 @@ export default {
         return false
       })
 
-      filteredTeamOptions.value = filtered.map(team => ({
-        value: team,
-      }))
+      const result = filtered.map(team => ({ value: team }))
+      // 始终把用户当前输入作为可选值放在首位，防止 AutoComplete 因空选项丢弃输入
+      if (!filtered.some(team => team === value)) {
+        result.unshift({ value })
+      }
+      filteredTeamOptions.value = result
     }
 
     // 初始化显示所有选项
@@ -465,7 +470,7 @@ export default {
         
         const response = await queryGroupAwards(queryData)
         
-        queryResults.value = response.awards || []
+        queryResults.value = (response.awards || []).map(a => ({ ...a, award_type: 'group' }))
         
         if (queryResults.value.length === 0) {
           message.info('未找到符合条件的获奖记录')

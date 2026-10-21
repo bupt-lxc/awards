@@ -129,8 +129,8 @@
             <menu-fold-outlined v-else />
           </a-button>
           <h1 v-if="!userInfo" class="welcome-title">
-            <img src="/25551751939512_.pic_hd.jpg" alt="logo" class="logo-img" />
-            中国国际青少年合唱比赛
+            <img src="/logo.jpg" alt="logo" class="logo-img" />
+            香港國際合唱節
           </h1>
           <a-breadcrumb v-else class="breadcrumb">
             <a-breadcrumb-item>

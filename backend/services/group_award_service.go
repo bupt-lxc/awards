@@ -4,10 +4,9 @@ import (
 	"awards-management/database"
 	"awards-management/dto"
 	"awards-management/models"
+	"awards-management/storage"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"gorm.io/gorm"
@@ -36,9 +35,13 @@ func (s *GroupAwardService) QueryGroupAwards(query dto.GroupAwardQuery) ([]map[s
 	if query.Category != "" {
 		dbQuery = dbQuery.Where("category = ?", query.Category)
 	}
-	if query.PersonName != "" && query.IDNumber != "" {
-		dbQuery = dbQuery.Where("EXISTS (SELECT 1 FROM group_members WHERE group_award_id = group_awards.id AND member_name = ? AND member_id_number = ?)",
-			query.PersonName, query.IDNumber)
+	if query.PersonName != "" {
+		dbQuery = dbQuery.Where("EXISTS (SELECT 1 FROM group_members WHERE group_award_id = group_awards.id AND member_name = ?)",
+			query.PersonName)
+	}
+	if query.IDNumber != "" {
+		dbQuery = dbQuery.Where("EXISTS (SELECT 1 FROM group_members WHERE group_award_id = group_awards.id AND member_id_number = ?)",
+			query.IDNumber)
 	}
 
 	// 先统计总数
@@ -70,31 +73,28 @@ func (s *GroupAwardService) QueryGroupAwards(query dto.GroupAwardQuery) ([]map[s
 		certificateImage := strings.TrimSpace(award.CertificateImage)
 
 		awardMap := map[string]interface{}{
-			"id":                award.ID,
-			"year":              award.Year,
-			"group_name":        award.GroupName,
-			"category":          award.Category,
-			"award_level":       award.AwardLevel,
-			"description":       award.Description,
-			"certificate_image": certificateImage,
-			"created_at":        award.CreatedAt,
-			"updated_at":        award.UpdatedAt,
-			"members":           []map[string]interface{}{},
+			"id":                 award.ID,
+			"year":               award.Year,
+			"group_name":         award.GroupName,
+			"category":           award.Category,
+			"award_level":        award.AwardLevel,
+			"description":        award.Description,
+			"certificate_image":  certificateImage,
+			"certificate_number": strings.TrimSpace(award.CertificateNumber),
+			"created_at":         award.CreatedAt,
+			"updated_at":         award.UpdatedAt,
+			"members":            []map[string]interface{}{},
 		}
 
 		for _, member := range award.GroupMembers {
 			if (query.PersonName == "" || query.PersonName == member.MemberName) &&
 				(query.IDNumber == "" || query.IDNumber == member.MemberIDNumber) {
 
-				memberCert := strings.TrimSpace(member.CertificateImage)
-				if memberCert == "" {
-					memberCert = certificateImage
-				}
-
 				memberMap := map[string]interface{}{
-					"name":              member.MemberName,
-					"id_number":         member.MemberIDNumber,
-					"certificate_image": memberCert,
+					"name":               member.MemberName,
+					"id_number":          member.MemberIDNumber,
+					"certificate_image":  strings.TrimSpace(member.CertificateImage),
+					"certificate_number": strings.TrimSpace(member.CertificateNumber),
 				}
 				awardMap["members"] = append(awardMap["members"].([]map[string]interface{}), memberMap)
 			}
@@ -108,12 +108,13 @@ func (s *GroupAwardService) QueryGroupAwards(query dto.GroupAwardQuery) ([]map[s
 
 func (s *GroupAwardService) CreateGroupAward(record dto.GroupAwardRecord) (*models.GroupAward, error) {
 	award := models.GroupAward{
-		Year:             record.Year,
-		GroupName:        record.GroupName,
-		Category:         record.Category,
-		AwardLevel:       record.AwardLevel,
-		Description:      record.Description,
-		CertificateImage: record.CertificateImage,
+		Year:              record.Year,
+		GroupName:         record.GroupName,
+		Category:          record.Category,
+		AwardLevel:        record.AwardLevel,
+		Description:       record.Description,
+		CertificateImage:  record.CertificateImage,
+		CertificateNumber: record.CertificateNumber,
 	}
 
 	tx := database.DB.Begin()
@@ -129,16 +130,12 @@ func (s *GroupAwardService) CreateGroupAward(record dto.GroupAwardRecord) (*mode
 	}
 
 	for _, member := range record.Members {
-		certImage := member.CertificateImage
-		if certImage == "" {
-			certImage = record.CertificateImage
-		}
-
 		groupMember := models.GroupMember{
-			GroupAwardID:     award.ID,
-			MemberName:       member.Name,
-			MemberIDNumber:   member.IDNumber,
-			CertificateImage: certImage,
+			GroupAwardID:      award.ID,
+			MemberName:        member.Name,
+			MemberIDNumber:    member.IDNumber,
+			CertificateImage:  member.CertificateImage,
+			CertificateNumber: member.CertificateNumber,
 		}
 		if err := tx.Create(&groupMember).Error; err != nil {
 			tx.Rollback()
@@ -205,14 +202,11 @@ func (s *GroupAwardService) UpdateGroupAward(update dto.GroupAwardUpdate) error 
 	if update.CertificateImage != "" {
 		updateData["certificate_image"] = update.CertificateImage
 	}
+	if update.CertificateNumber != nil {
+		updateData["certificate_number"] = *update.CertificateNumber
+	}
 
 	if update.Members != nil {
-		for i := range update.Members {
-			if update.Members[i].CertificateImage == "" {
-				update.Members[i].CertificateImage = award.CertificateImage
-			}
-		}
-
 		if err := tx.Where("group_award_id = ?", update.ID).Delete(&models.GroupMember{}).Error; err != nil {
 			tx.Rollback()
 			return err
@@ -220,10 +214,11 @@ func (s *GroupAwardService) UpdateGroupAward(update dto.GroupAwardUpdate) error 
 
 		for _, member := range update.Members {
 			gm := models.GroupMember{
-				GroupAwardID:     update.ID,
-				MemberName:       member.Name,
-				MemberIDNumber:   member.IDNumber,
-				CertificateImage: member.CertificateImage,
+				GroupAwardID:      update.ID,
+				MemberName:        member.Name,
+				MemberIDNumber:    member.IDNumber,
+				CertificateImage:  member.CertificateImage,
+				CertificateNumber: member.CertificateNumber,
 			}
 			if err := tx.Create(&gm).Error; err != nil {
 				tx.Rollback()
@@ -266,14 +261,14 @@ func (s *GroupAwardService) DeleteGroupAward(id uint) error {
 		return err
 	}
 
-	// 收集需要删除的文件
-	var filesToDelete []string
-	if award.CertificateImage != "" && strings.HasPrefix(award.CertificateImage, "/static/certificates/") {
-		filesToDelete = append(filesToDelete, strings.TrimPrefix(award.CertificateImage, "/static/certificates/"))
+	// 收集需要删除的文件（保留完整路径传递给存储服务）
+	filesToDelete := make(map[string]struct{})
+	if award.CertificateImage != "" {
+		filesToDelete[award.CertificateImage] = struct{}{}
 	}
 	for _, m := range members {
-		if m.CertificateImage != "" && strings.HasPrefix(m.CertificateImage, "/static/certificates/") {
-			filesToDelete = append(filesToDelete, strings.TrimPrefix(m.CertificateImage, "/static/certificates/"))
+		if m.CertificateImage != "" {
+			filesToDelete[m.CertificateImage] = struct{}{}
 		}
 	}
 
@@ -290,12 +285,15 @@ func (s *GroupAwardService) DeleteGroupAward(id uint) error {
 		return err
 	}
 
-	// 异步清理文件
-	go func(files []string) {
-		for _, file := range files {
-			filePath := filepath.Join("uploads/certificates", file)
-			if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-				log.Printf("清理证书文件失败 [%s]: %v", filePath, err)
+	// 异步清理文件（通过存储服务，MinIO 或本地）
+	go func(files map[string]struct{}) {
+		store := storage.Get()
+		if store == nil {
+			return
+		}
+		for file := range files {
+			if err := store.Delete(file); err != nil {
+				log.Printf("清理证书文件失败 [%s]: %v", file, err)
 			}
 		}
 	}(filesToDelete)
@@ -315,23 +313,25 @@ func (s *GroupAwardService) GetGroupAwardByID(id uint) (map[string]interface{}, 
 	}
 
 	result := map[string]interface{}{
-		"id":                award.ID,
-		"year":              award.Year,
-		"group_name":        award.GroupName,
-		"category":          award.Category,
-		"award_level":       award.AwardLevel,
-		"description":       award.Description,
-		"certificate_image": award.CertificateImage,
-		"created_at":        award.CreatedAt,
-		"updated_at":        award.UpdatedAt,
-		"members":           []map[string]interface{}{},
+		"id":                 award.ID,
+		"year":               award.Year,
+		"group_name":         award.GroupName,
+		"category":           award.Category,
+		"award_level":        award.AwardLevel,
+		"description":        award.Description,
+		"certificate_image":  award.CertificateImage,
+		"certificate_number": award.CertificateNumber,
+		"created_at":         award.CreatedAt,
+		"updated_at":         award.UpdatedAt,
+		"members":            []map[string]interface{}{},
 	}
 
 	for _, member := range award.GroupMembers {
 		result["members"] = append(result["members"].([]map[string]interface{}), map[string]interface{}{
-			"name":              member.MemberName,
-			"id_number":         member.MemberIDNumber,
-			"certificate_image": member.CertificateImage,
+			"name":               member.MemberName,
+			"id_number":          member.MemberIDNumber,
+			"certificate_image":  member.CertificateImage,
+			"certificate_number": member.CertificateNumber,
 		})
 	}
 
@@ -356,16 +356,17 @@ func (s *GroupAwardService) GetAllGroupAwards() ([]map[string]interface{}, error
 		}
 
 		result := map[string]interface{}{
-			"id":                award.ID,
-			"year":              award.Year,
-			"group_name":        award.GroupName,
-			"category":          award.Category,
-			"award_level":       award.AwardLevel,
-			"description":       award.Description,
-			"certificate_image": award.CertificateImage,
-			"created_at":        award.CreatedAt,
-			"updated_at":        award.UpdatedAt,
-			"members":           []map[string]interface{}{},
+			"id":                 award.ID,
+			"year":               award.Year,
+			"group_name":         award.GroupName,
+			"category":           award.Category,
+			"award_level":        award.AwardLevel,
+			"description":        award.Description,
+			"certificate_image":  award.CertificateImage,
+			"certificate_number": award.CertificateNumber,
+			"created_at":         award.CreatedAt,
+			"updated_at":         award.UpdatedAt,
+			"members":            []map[string]interface{}{},
 		}
 
 		for _, member := range award.GroupMembers {
@@ -373,9 +374,10 @@ func (s *GroupAwardService) GetAllGroupAwards() ([]map[string]interface{}, error
 				continue
 			}
 			result["members"] = append(result["members"].([]map[string]interface{}), map[string]interface{}{
-				"name":              member.MemberName,
-				"id_number":         member.MemberIDNumber,
-				"certificate_image": member.CertificateImage,
+				"name":               member.MemberName,
+				"id_number":          member.MemberIDNumber,
+				"certificate_image":  member.CertificateImage,
+				"certificate_number": member.CertificateNumber,
 			})
 		}
 
@@ -388,7 +390,7 @@ func (s *GroupAwardService) GetAllGroupAwards() ([]map[string]interface{}, error
 func (s *GroupAwardService) GetAllGroupAwardsLight() ([]map[string]interface{}, error) {
 	var awards []models.GroupAward
 
-	err := database.DB.Select("id, year, group_name, category, award_level, description, created_at, updated_at").
+	err := database.DB.Select("id, year, group_name, category, award_level, description, certificate_image, certificate_number, created_at, updated_at").
 		Preload("GroupMembers").
 		Order("created_at DESC").
 		Find(&awards).Error
@@ -404,16 +406,17 @@ func (s *GroupAwardService) GetAllGroupAwardsLight() ([]map[string]interface{}, 
 		}
 
 		result := map[string]interface{}{
-			"id":              award.ID,
-			"year":            award.Year,
-			"group_name":      award.GroupName,
-			"category":        award.Category,
-			"award_level":     award.AwardLevel,
-			"description":     award.Description,
-			"created_at":      award.CreatedAt,
-			"updated_at":      award.UpdatedAt,
-			"has_certificate": award.CertificateImage != "",
-			"members":         []map[string]interface{}{},
+			"id":                 award.ID,
+			"year":               award.Year,
+			"group_name":         award.GroupName,
+			"category":           award.Category,
+			"award_level":        award.AwardLevel,
+			"description":        award.Description,
+			"certificate_number": award.CertificateNumber,
+			"created_at":         award.CreatedAt,
+			"updated_at":         award.UpdatedAt,
+			"has_certificate":    award.CertificateImage != "",
+			"members":            []map[string]interface{}{},
 		}
 
 		for _, member := range award.GroupMembers {
@@ -421,9 +424,10 @@ func (s *GroupAwardService) GetAllGroupAwardsLight() ([]map[string]interface{}, 
 				continue
 			}
 			result["members"] = append(result["members"].([]map[string]interface{}), map[string]interface{}{
-				"name":            member.MemberName,
-				"id_number":       member.MemberIDNumber,
-				"has_certificate": member.CertificateImage != "",
+				"name":               member.MemberName,
+				"id_number":          member.MemberIDNumber,
+				"has_certificate":    member.CertificateImage != "",
+				"certificate_number": member.CertificateNumber,
 			})
 		}
 

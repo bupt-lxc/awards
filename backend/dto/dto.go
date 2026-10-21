@@ -23,8 +23,8 @@ type TokenResponse struct {
 // PersonAwardQuery 个人获奖查询请求
 type PersonAwardQuery struct {
 	Year       *int   `json:"year,omitempty"`
-	PersonName string `json:"person_name" binding:"required,max=100"`
-	IDNumber   string `json:"id_number" binding:"required,max=50"`
+	PersonName string `json:"person_name,omitempty" binding:"max=100"`
+	IDNumber   string `json:"id_number,omitempty" binding:"max=50"`
 	Category   string `json:"category,omitempty" binding:"max=100"`
 	Page       int    `json:"page,omitempty"`      // 页码，从1开始；为0时不分页
 	PageSize   int    `json:"page_size,omitempty"` // 每页条数，默认20，最大100
@@ -43,48 +43,52 @@ type GroupAwardQuery struct {
 
 // PersonAwardRecord 个人获奖记录
 type PersonAwardRecord struct {
-	Year             int    `json:"year" binding:"required"`
-	PersonName       string `json:"person_name" binding:"required,max=100"`
-	IDNumber         string `json:"id_number" binding:"required,max=50"`
-	Category         string `json:"category" binding:"required,max=100"`
-	AwardLevel       string `json:"award_level" binding:"required,max=50"`
-	Description      string `json:"description,omitempty"`
-	CertificateImage string `json:"certificate_image,omitempty" binding:"max=500"`
+	Year              int    `json:"year" binding:"required"`
+	PersonName        string `json:"person_name" binding:"required,max=100"`
+	IDNumber          string `json:"id_number" binding:"required,max=50"`
+	Category          string `json:"category" binding:"required,max=100"`
+	AwardLevel        string `json:"award_level" binding:"required,max=50"`
+	Description       string `json:"description,omitempty"`
+	CertificateImage  string `json:"certificate_image,omitempty" binding:"max=500"`
+	CertificateNumber string `json:"certificate_number,omitempty" binding:"max=100"`
 }
 
 // GroupAwardRecord 团体获奖记录
 type GroupAwardRecord struct {
-	Year             int      `json:"year" binding:"required"`
-	GroupName        string   `json:"group_name" binding:"required,max=200"`
-	Category         string   `json:"category" binding:"required,max=100"`
-	AwardLevel       string   `json:"award_level" binding:"required,max=50"`
-	Description      string   `json:"description,omitempty"`
-	Members          []Member `json:"members" binding:"required,dive"`
-	CertificateImage string   `json:"certificate_image,omitempty" binding:"max=500"`
+	Year              int      `json:"year" binding:"required"`
+	GroupName         string   `json:"group_name" binding:"required,max=200"`
+	Category          string   `json:"category" binding:"required,max=100"`
+	AwardLevel        string   `json:"award_level" binding:"required,max=50"`
+	Description       string   `json:"description,omitempty"`
+	Members           []Member `json:"members" binding:"required,dive"`
+	CertificateImage  string   `json:"certificate_image,omitempty" binding:"max=500"`
+	CertificateNumber string   `json:"certificate_number,omitempty" binding:"max=100"`
 }
 
 // PersonAwardUpdate 个人获奖更新请求
 type PersonAwardUpdate struct {
-	ID               uint   `json:"id" binding:"required"`
-	Year             *int   `json:"year,omitempty"`
-	PersonName       string `json:"person_name,omitempty" binding:"max=100"`
-	IDNumber         string `json:"id_number,omitempty" binding:"max=50"`
-	Category         string `json:"category,omitempty" binding:"max=100"`
-	AwardLevel       string `json:"award_level,omitempty" binding:"max=50"`
-	Description      string `json:"description,omitempty"`
-	CertificateImage string `json:"certificate_image,omitempty" binding:"max=500"`
+	ID                uint    `json:"id" binding:"required"`
+	Year              *int    `json:"year,omitempty"`
+	PersonName        string  `json:"person_name,omitempty" binding:"max=100"`
+	IDNumber          string  `json:"id_number,omitempty" binding:"max=50"`
+	Category          string  `json:"category,omitempty" binding:"max=100"`
+	AwardLevel        string  `json:"award_level,omitempty" binding:"max=50"`
+	Description       string  `json:"description,omitempty"`
+	CertificateImage  string  `json:"certificate_image,omitempty" binding:"max=500"`
+	CertificateNumber *string `json:"certificate_number,omitempty" binding:"omitempty,max=100"`
 }
 
 // GroupAwardUpdate 团体获奖更新请求
 type GroupAwardUpdate struct {
-	ID               uint     `json:"id" binding:"required"`
-	Year             *int     `json:"year,omitempty"`
-	GroupName        string   `json:"group_name,omitempty" binding:"max=200"`
-	Category         string   `json:"category,omitempty" binding:"max=100"`
-	AwardLevel       string   `json:"award_level,omitempty" binding:"max=50"`
-	Description      string   `json:"description,omitempty"`
-	CertificateImage string   `json:"certificate_image,omitempty" binding:"max=500"`
-	Members          []Member `json:"members,omitempty"`
+	ID                uint     `json:"id" binding:"required"`
+	Year              *int     `json:"year,omitempty"`
+	GroupName         string   `json:"group_name,omitempty" binding:"max=200"`
+	Category          string   `json:"category,omitempty" binding:"max=100"`
+	AwardLevel        string   `json:"award_level,omitempty" binding:"max=50"`
+	Description       string   `json:"description,omitempty"`
+	CertificateImage  string   `json:"certificate_image,omitempty" binding:"max=500"`
+	CertificateNumber *string  `json:"certificate_number,omitempty" binding:"omitempty,max=100"`
+	Members           []Member `json:"members,omitempty"`
 }
 
 // MemberCertificateUpdate 成员证书更新请求
@@ -130,7 +134,8 @@ type BatchUploadResponse struct {
 }
 
 type Member struct {
-	Name             string `json:"name" binding:"required,max=100"`
-	IDNumber         string `json:"id_number" binding:"required,max=50"`
-	CertificateImage string `json:"certificate_image,omitempty" binding:"max=500"`
+	Name              string `json:"name" binding:"required,max=100"`
+	IDNumber          string `json:"id_number" binding:"required,max=50"`
+	CertificateImage  string `json:"certificate_image,omitempty" binding:"max=500"`
+	CertificateNumber string `json:"certificate_number,omitempty" binding:"max=100"`
 }

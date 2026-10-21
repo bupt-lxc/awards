@@ -4,6 +4,7 @@ import (
 	"awards-management/database"
 	"awards-management/dto"
 	"awards-management/models"
+	"awards-management/storage"
 	"fmt"
 	"log"
 
@@ -20,9 +21,14 @@ func (s *PersonAwardService) QueryPersonAwards(query dto.PersonAwardQuery) ([]mo
 	var awards []models.PersonAward
 	var total int64
 
-	db := database.DB.Model(&models.PersonAward{}).
-		Where("person_name = ? AND id_number = ?", query.PersonName, query.IDNumber)
+	db := database.DB.Model(&models.PersonAward{})
 
+	if query.PersonName != "" {
+		db = db.Where("person_name = ?", query.PersonName)
+	}
+	if query.IDNumber != "" {
+		db = db.Where("id_number = ?", query.IDNumber)
+	}
 	if query.Year != nil {
 		db = db.Where("year = ?", *query.Year)
 	}
@@ -53,13 +59,14 @@ func (s *PersonAwardService) QueryPersonAwards(query dto.PersonAwardQuery) ([]mo
 
 func (s *PersonAwardService) CreatePersonAward(record dto.PersonAwardRecord) (*models.PersonAward, error) {
 	award := models.PersonAward{
-		Year:             record.Year,
-		PersonName:       record.PersonName,
-		IDNumber:         record.IDNumber,
-		Category:         record.Category,
-		AwardLevel:       record.AwardLevel,
-		Description:      record.Description,
-		CertificateImage: record.CertificateImage,
+		Year:              record.Year,
+		PersonName:        record.PersonName,
+		IDNumber:          record.IDNumber,
+		Category:          record.Category,
+		AwardLevel:        record.AwardLevel,
+		Description:       record.Description,
+		CertificateImage:  record.CertificateImage,
+		CertificateNumber: record.CertificateNumber,
 	}
 
 	err := database.DB.Create(&award).Error
@@ -121,6 +128,9 @@ func (s *PersonAwardService) UpdatePersonAward(update dto.PersonAwardUpdate) err
 	if update.CertificateImage != "" {
 		updateData["certificate_image"] = update.CertificateImage
 	}
+	if update.CertificateNumber != nil {
+		updateData["certificate_number"] = *update.CertificateNumber
+	}
 
 	if len(updateData) == 0 {
 		return fmt.Errorf("没有提供更新数据")
@@ -130,12 +140,26 @@ func (s *PersonAwardService) UpdatePersonAward(update dto.PersonAwardUpdate) err
 }
 
 func (s *PersonAwardService) DeletePersonAward(id uint) error {
-	result := database.DB.Delete(&models.PersonAward{}, id)
+	var award models.PersonAward
+	if err := database.DB.First(&award, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("获奖记录不存在")
+		}
+		return err
+	}
+
+	result := database.DB.Delete(&award)
 	if result.Error != nil {
 		return result.Error
 	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("获奖记录不存在")
+	if award.CertificateImage != "" {
+		go func(filePath string) {
+			if store := storage.Get(); store != nil {
+				if err := store.Delete(filePath); err != nil {
+					log.Printf("删除个人证书文件失败 %s: %v", filePath, err)
+				}
+			}
+		}(award.CertificateImage)
 	}
 	return nil
 }
@@ -160,7 +184,7 @@ func (s *PersonAwardService) GetAllPersonAwards() ([]models.PersonAward, error) 
 
 func (s *PersonAwardService) GetAllPersonAwardsLight() ([]map[string]interface{}, error) {
 	var awards []models.PersonAward
-	err := database.DB.Select("id, year, person_name, id_number, category, award_level, description, created_at, updated_at").
+	err := database.DB.Select("id, year, person_name, id_number, category, award_level, description, certificate_image, certificate_number, created_at, updated_at").
 		Order("created_at DESC").
 		Find(&awards).Error
 	if err != nil {
@@ -170,16 +194,17 @@ func (s *PersonAwardService) GetAllPersonAwardsLight() ([]map[string]interface{}
 	var results []map[string]interface{}
 	for _, award := range awards {
 		results = append(results, map[string]interface{}{
-			"id":              award.ID,
-			"year":            award.Year,
-			"person_name":     award.PersonName,
-			"id_number":       award.IDNumber,
-			"category":        award.Category,
-			"award_level":     award.AwardLevel,
-			"description":     award.Description,
-			"created_at":      award.CreatedAt,
-			"updated_at":      award.UpdatedAt,
-			"has_certificate": award.CertificateImage != "",
+			"id":                 award.ID,
+			"year":               award.Year,
+			"person_name":        award.PersonName,
+			"id_number":          award.IDNumber,
+			"category":           award.Category,
+			"award_level":        award.AwardLevel,
+			"description":        award.Description,
+			"certificate_number": award.CertificateNumber,
+			"created_at":         award.CreatedAt,
+			"updated_at":         award.UpdatedAt,
+			"has_certificate":    award.CertificateImage != "",
 		})
 	}
 

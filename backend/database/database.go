@@ -99,7 +99,8 @@ func InitDatabase() error {
 	return nil
 }
 
-// createDefaultAdmin 创建默认管理员账户
+// createDefaultAdmin 创建初始管理员账户。
+// 出于安全考虑，首次启动必须通过环境变量显式提供密码。
 func createDefaultAdmin() error {
 	// 检查是否已存在admin用户
 	var count int64
@@ -108,10 +109,10 @@ func createDefaultAdmin() error {
 		return nil // 已存在，不需要创建
 	}
 
-	// 默认密码：优先环境变量 ADMIN_DEFAULT_PASSWORD，fallback admin123
+	// 初始密码只允许通过环境变量提供，避免新部署使用公开默认密码。
 	defaultPassword := os.Getenv("ADMIN_DEFAULT_PASSWORD")
 	if defaultPassword == "" {
-		defaultPassword = "admin123"
+		return fmt.Errorf("未设置 ADMIN_DEFAULT_PASSWORD，无法创建初始管理员")
 	}
 
 	// 使用 bcrypt 生成密码哈希 (cost=12)

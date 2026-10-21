@@ -2,13 +2,22 @@
 .env
 *.pem
 *.key
+/SecretKey.csv
 
 # === 上传文件 ===
 backend/uploads/
+/uploads/
+
+# === 本地业务数据与交接材料（不进入源码仓库） ===
+/9.*录入数据/
+/outputs/
+/handoff-local/
+/*.pdf
+/*.xlsx
+/*.jpg
 
 # === 前端 ===
 frontend/node_modules/
-frontend/dist/
 
 # === 构建产物 ===
 *.exe

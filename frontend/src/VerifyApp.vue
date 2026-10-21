@@ -4,10 +4,10 @@
     <header class="verify-header">
       <div class="header-container">
         <div class="logo-section">
-          <img src="/25551751939512_.pic_hd.jpg" alt="logo" class="logo-img" />
+          <img src="/logo.jpg" alt="logo" class="logo-img" />
           <div class="title-block">
-            <h1 class="logo-title">中国国际青少年合唱节</h1>
-          <p class="logo-subtitle">CHINA INTERNATIONAL<br>YOUNG SINGERS' CHORAL FESTIVAL</p>
+            <h1 class="logo-title">香港國際合唱節</h1>
+          <p class="logo-subtitle">HONG KONG INTERNATIONAL<br>CHORAL FESTIVAL</p>
           </div>
         </div>
         <div class="verification-badge">
@@ -215,7 +215,7 @@
     <!-- 页脚 -->
     <footer class="verify-footer">
       <div class="footer-container">
-        <p class="footer-org">中国国际青少年合唱节组委会</p>
+        <p class="footer-org">香港國際合唱節組委會</p>
         <p class="footer-info">地址：深圳市南山区后海滨路保利剧院  电话：0755-86371696</p>
       </div>
     </footer>
@@ -259,17 +259,27 @@
       award_id: parseInt(urlParams.get('award_id'))
     }
 
-    // 检查必需参数
-    const requiredParams = ['type', 'person_name', 'id_number', 'year', 'category']
-    for (const param of requiredParams) {
-      if (!params[param]) {
-        throw new Error(`缺少必要参数: ${param}`)
-      }
+    // 检查必需参数 — 区分个人和团体
+    if (!params.type) {
+      throw new Error('缺少必要参数: type')
     }
 
-    // 如果是团体查询，group_name 也是必需的
-    if (params.type === 'group' && !params.group_name) {
-      throw new Error('团体查询缺少必要参数: group_name')
+    if (params.type === 'person') {
+      const requiredPersonParams = ['person_name', 'id_number', 'year', 'category']
+      for (const param of requiredPersonParams) {
+        if (!params[param]) {
+          throw new Error(`缺少必要参数: ${param}`)
+        }
+      }
+    } else if (params.type === 'group') {
+      const requiredGroupParams = ['group_name', 'year', 'category']
+      for (const param of requiredGroupParams) {
+        if (!params[param]) {
+          throw new Error(`缺少必要参数: ${param}`)
+        }
+      }
+    } else {
+      throw new Error(`无效的查询类型: ${params.type}`)
     }
 
     return params
@@ -308,15 +318,15 @@
       }
       console.log(response);
       if (response && response.awards && response.awards.length > 0) {
-        // 如果有多个结果，尝试根据奖项ID精确匹配
-        let targetAward = null
+        // 优先根据 award_id 精确匹配，否则取第一条
+        let targetAward = response.awards[0]
         if (params.award_id) {
           const exactMatch = response.awards.find(award => award.id === params.award_id)
           if (exactMatch) {
             targetAward = exactMatch
           }
         }
-        
+
         if (!targetAward) {
           awardInfo.value = null
           error.value = '未找到匹配的获奖记录';
@@ -411,10 +421,10 @@
     <div class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">${title || '获奖证书'}</div>
-        <img 
-          src="${processedUrl}" 
-          alt="${title || '获奖证书'}" 
-          class="modal-image" 
+        <img
+          src="${processedUrl}"
+          alt="${title || '获奖证书'}"
+          class="modal-image"
           onerror="this.style.display='none';this.nextElementSibling.style.display='block';"
         />
         <div class="modal-error" style="display:none;text-align:center;padding:20px;color:#ff4d4f;">

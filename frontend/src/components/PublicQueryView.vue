@@ -33,12 +33,13 @@
             </a-col>
 
             <a-col :xs="24" :sm="12" :md="6">
-              <a-form-item label="获奖年份" name="year" :rules="yearRules">
-                <a-select 
-                  v-model:value="queryForm.year" 
-                  placeholder="请选择年份"
+              <a-form-item label="获奖年份" name="year">
+                <a-select
+                  v-model:value="queryForm.year"
+                  placeholder="请选择年份（可选）"
                   size="large"
                   show-search
+                  allow-clear
                 >
                   <a-select-option v-for="year in availableYears" :key="year" :value="year">
                     {{ year }}年
@@ -48,37 +49,21 @@
             </a-col>
             
             <a-col :xs="24" :sm="12" :md="6" v-if="queryForm.query_type === 'group'">
-              <a-form-item label="团队名称" name="group_name" :rules="groupNameRules">
-                <a-select
+              <a-form-item label="团队名称" name="group_name">
+                <a-input
                   v-model:value="queryForm.group_name"
-                  placeholder="请选择或输入团队名称"
+                  placeholder="输入团队名称（可选）"
                   size="large"
-                  show-search
-                  :options="groupNameOptions"
-                  :filter-option="filterOption"
                   allow-clear
-                >
-                  <template #dropdownRender="{ menuNode: menu }">
-                    <v-nodes :vnodes="menu" />
-                    <a-divider style="margin: 4px 0" />
-                    <div style="padding: 4px 8px">
-                      <a-input 
-                        v-model:value="queryForm.custom_group_name"
-                        placeholder="输入其他团队名称"
-                        size="small"
-                        @pressEnter="addCustomGroup"
-                      />
-                    </div>
-                  </template>
-                </a-select>
+                />
               </a-form-item>
             </a-col>
             
             <a-col :xs="24" :sm="12" :md="6" v-if="queryForm.query_type === 'person'">
-              <a-form-item label="个人姓名" name="person_name" :rules="personNameRules">
-                <a-input 
-                  v-model:value="queryForm.person_name" 
-                  placeholder="输入个人姓名"
+              <a-form-item label="个人姓名" name="person_name">
+                <a-input
+                  v-model:value="queryForm.person_name"
+                  placeholder="输入个人姓名（可选）"
                   size="large"
                   allow-clear
                 />
@@ -86,10 +71,10 @@
             </a-col>
             
             <a-col :xs="24" :sm="12" :md="6">
-              <a-form-item label="参赛编码" name="id_number" :rules="idNumberRules">
-                <a-input 
-                  v-model:value="queryForm.id_number" 
-                  placeholder="输入参赛编码"
+              <a-form-item label="参赛编码" name="id_number">
+                <a-input
+                  v-model:value="queryForm.id_number"
+                  placeholder="输入参赛编码（可选）"
                   size="large"
                   allow-clear
                 />
@@ -303,6 +288,13 @@
       <img src="../assets/cca-logo.png" alt="中国合唱协会" class="org-logo" />
       <img src="../assets/cccf-logo.png" alt="中国少年儿童合唱节" class="festival-logo" />
     </div>
+
+    <!-- ICP备案号 -->
+    <div class="icp-container">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="icp-link">
+        备案/许可证编号为：苏ICP备2026042125号
+      </a>
+    </div>
   </div>
 </template>
 
@@ -413,7 +405,7 @@ const onQuery = async () => {
     hasQueried.value = true;
     
     const queryParams = {
-      year: queryForm.year
+      year: queryForm.year || undefined
     };
     
     // 只有在字段有值时才添加到查询参数
@@ -430,9 +422,18 @@ const onQuery = async () => {
       queryParams.category = queryForm.category.trim();
     }
     
-    // 统一使用个人奖项查询API
-    const response = await awardAPI.queryPersonAwards(queryParams);
-    queryResults.value = response.awards || [];
+    // 根据查询类型调用不同的API
+    let response;
+    console.log('[PublicQueryView] 查询类型:', queryForm.query_type, '查询参数:', JSON.stringify(queryParams));
+    if (queryForm.query_type === 'group') {
+      response = await awardAPI.queryGroupAwards(queryParams);
+    } else {
+      response = await awardAPI.queryPersonAwards(queryParams);
+    }
+    console.log('[PublicQueryView] 原始返回:', JSON.stringify(response));
+    // 给每条结果标记 award_type，模板用它区分渲染
+    const awardType = queryForm.query_type === 'group' ? 'group' : 'person';
+    queryResults.value = (response.awards || []).map(a => ({ ...a, award_type: awardType }));
     
     message.success(`查询完成，找到 ${queryResults.value.length} 条记录`);
     
@@ -992,6 +993,25 @@ onMounted(() => {
   height: 100px;
   width: auto;
   object-fit: contain;
+}
+
+.icp-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+  padding: 8px 0 20px 0;
+}
+
+.icp-link {
+  color: #666;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.icp-link:hover {
+  color: #1677ff;
 }
 
 /* 查询类型单选按钮样式 */

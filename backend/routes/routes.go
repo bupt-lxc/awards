@@ -74,6 +74,7 @@ func SetupRoutes(r *gin.Engine) {
 			// 公开接口（限流：30 req/min per IP）
 			publicAwards := awards.Use(middleware.IPRateLimit())
 			{
+				publicAwards.GET("/suggestions", awardController.SuggestNames)
 				publicAwards.POST("/query/person", awardController.QueryPersonAwards)
 				publicAwards.POST("/query/group", awardController.QueryGroupAwards)
 				publicAwards.GET("/:award_id", awardController.GetAwardDetail)
