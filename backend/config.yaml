@@ -7,7 +7,7 @@ database:
   host: "127.0.0.1"
   port: 3306
   username: "awards_user"
-  password: "awards_pass123"
+  password: "change-me"
   dbname: "awards_management"
   charset: "utf8mb4"
   parseTime: true
@@ -17,7 +17,7 @@ database:
   connMaxLifetime: 3600 # seconds
 
 jwt:
-  secret: "awards-dev-jwt-secret-key-2026-please-change-in-production"
+  secret: "change-me-development-only"
   expireHours: 8
 
 cors:

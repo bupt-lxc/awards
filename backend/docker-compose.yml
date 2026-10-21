@@ -37,6 +37,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME:-awards_management}
       JWT_SECRET: ${JWT_SECRET}
+      ADMIN_DEFAULT_PASSWORD: ${ADMIN_DEFAULT_PASSWORD}
+      COS_SECRET_ID: ${COS_SECRET_ID:-}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:-}
+      COS_REGION: ${COS_REGION:-}
+      COS_BUCKET: ${COS_BUCKET:-}
+      COS_PUBLIC_URL: ${COS_PUBLIC_URL:-/static/certificates}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
